@@ -1,0 +1,1908 @@
+local function getService(name)
+    local s = nil
+    pcall(function() s = game:GetService(name) end)
+    if not s then pcall(function() s = game[name] end) end
+    return s
+end
+
+local Players = getService("Players")
+local RunService = getService("RunService")
+local UserInputService = getService("UserInputService")
+local Workspace = workspace or getService("Workspace")
+
+repeat task.wait() until Players and Players.LocalPlayer
+local LocalPlayer = Players.LocalPlayer
+
+loadstring(game:HttpGet("https://raw.githubusercontent.com/Oracle228/Inertia/refs/heads/main/Arcane(Lib).lua"))()
+repeat task.wait() until Neverlose
+local Arcane = Neverlose
+
+local cfg = {
+    player = {
+        enabled = false,
+        targetMode = "None",
+        isTeamCheck = false,
+        yawMode = "Static",
+        yawValue = 0,
+        swayRange = 60,
+        swaySpeed = 1,
+        
+        jitterEnabled = false,
+        jitterValue = 30,
+        jitterSpeed = 20,
+        jitterRandom = false,
+        
+        manualsEnabled = false,
+        leftYaw = -30,
+        rightYaw = 30,
+        manualDirection = "None",
+        showIndicators = false,
+        indicatorsOffset = 80,
+        indicatorsScale = 1,
+        
+        bodyYaw = "Off",
+        bodyYawValue = 0,
+    },
+    ragebot = {
+        enabled = false,
+        lowVelocity = 20,
+        highVelocityEnabled = false,
+        highVelocity = 200,
+        showVelocity = false,
+        intervalMs = 80,
+        preDelayMs = 0,
+    },
+    spinner = {
+        enabled = false,
+        spinSpeed = 50,
+        randomAngles = false,
+    },
+    misc = {
+        fovEnabled = false,
+        fovValue = 90,
+        flipEnabled = false,
+        cframeBhopEnabled = false,
+        cframeBhopRequireSpace = true,
+        cframeBhopMaxSpeed = 160,
+        cframeBhopJumpHeight = 50,
+        autoJumpEnabled = false,
+        noJumpCooldown = false,
+    },
+    visuals = {
+        hatEnabled = false,
+        hatRadius = 2.0,
+        hatHeight = 1.5,
+        hatSegments = 16,
+        hatMainColor = Color3.fromRGB(230, 217, 179),
+        hatOutlineColor = Color3.fromRGB(153, 102, 51),
+        hatMainOpacity = 80,
+        hatOutlineOpacity = 100,
+        hatRainbow = false,
+        hatRainbowSpeed = 1,
+        
+        NimbEnabled = false,
+        NimbRadius = 1.5,
+        NimbHeight = 1.0,
+        NimbTubeRadius = 0.15,
+        NimbSegments = 30,
+        NimbTubeSegments = 8,
+        NimbMainColor = Color3.fromRGB(255, 215, 0),
+        NimbOutlineColor = Color3.fromRGB(255, 215, 0),
+        NimbMainOpacity = 80,
+        NimbOutlineOpacity = 100,
+        NimbRainbow = false,
+        NimbRainbowSpeed = 1,
+        
+        serverPosEnabled = false,
+        serverPosColor = Color3.fromRGB(0, 255, 255),
+        serverPosOpacity = 100,
+        serverPosRadius = 15,
+        serverPosSides = 6,
+        serverPosSpinSpeed = 10,
+        serverPosPulseSpeed = 50,
+        serverPosLatency = 0.05,
+    },
+    wings = {
+        enabled = false,
+        style = "Angel",
+        color = Color3.fromRGB(255, 255, 255),
+        outlineColor = Color3.fromRGB(200, 200, 255),
+        opacity = 85,
+        outlineOpacity = 100,
+        size = 4.0,
+        feathers = 6,
+        rainbow = false,
+        rainbowSpeed = 1,
+    },
+}
+local spinAngle = 0
+local spinAngleActive = 0
+
+local function lerpVector(v1, v2, t)
+    return Vector3.new(
+        v1.X + (v2.X - v1.X) * t,
+        v1.Y + (v2.Y - v1.Y) * t,
+        v1.Z + (v2.Z - v1.Z) * t
+    )
+end
+local lastJitterTime = 0
+local jitterState = false
+local currentJitterOffset = 0
+local targetPlayer = nil
+local autoShootLastClick = 0
+local autoShootDelayStart = 0
+local isWaitingToShoot = false
+local currentVelocityMagnitude = 0
+local currentVelocityMax = 0
+local currentHoldKeyInt = 86
+local holdKeyWaitingRebind = false
+local wasAutoShooting = false
+local VK_NAMES = {}
+local VK_CODES = {}
+for i = 65, 90 do
+    VK_NAMES[i] = string.char(i)
+    table.insert(VK_CODES, i)
+end
+for i = 112, 123 do
+    VK_NAMES[i] = "F" .. (i - 111)
+    table.insert(VK_CODES, i)
+end
+for i = 96, 105 do
+    VK_NAMES[i] = "Num" .. (i - 96)
+    table.insert(VK_CODES, i)
+end
+local extraVK = {
+    [4]="MouseM", [5]="Mouse4", [6]="Mouse5",
+    [160]="LShift",[161]="RShift",[162]="LCtrl",[163]="RCtrl",
+    [164]="LAlt",[165]="RAlt",[18]="Alt",[9]="Tab",
+    [32]="Space",[45]="Insert",[46]="Delete",[36]="Home",
+    [35]="End",[33]="PageUp",[34]="PageDown",
+    [37]="Left",[38]="Up",[39]="Right",[40]="Down",
+    [192]="Tilde",[49]="1",[50]="2",[51]="3",[52]="4",[53]="5",
+    [54]="6",[55]="7",[56]="8",[57]="9",[48]="0",
+}
+for vk, name in pairs(extraVK) do
+    VK_NAMES[vk] = name
+    table.insert(VK_CODES, vk)
+end
+local bmMessages = {
+    Inertia = {
+        "Matcha feels different when Inertia Lua is running",
+        "Unleash the full potential of Matcha with Inertia Lua",
+        "Power has a name on Matcha - Inertia Lua",
+        "Step into Matcha domination powered by Inertia Lua",
+        "Your Matcha experience deserves Inertia Lua",
+        "Built for victory on Matcha - Inertia Lua",
+        "When Matcha matters, Inertia Lua delivers",
+        "Matcha at its peak with Inertia Lua",
+        "Nothing controls Matcha like Inertia Lua",
+        "The edge you need on Matcha - Inertia Lua",
+    },
+    Aggressive = {
+        "Lol what did you inject, {name}? Get Inertia Lua.",
+        "You suck {name} - install Inertia Lua before you queue again",
+        "Still losing? Maybe try Inertia Lua instead of that trash",
+        "That script is garbage, {name} - use Inertia Lua already",
+        "Imagine playing Matcha without Inertia Lua",
+        "Your lua ain't it, {name} - switch to Inertia Lua",
+        "Stop coping and start using Inertia Lua",
+        "What is that weak script? Try Inertia Lua instead",
+        "Skill issue ({name}) - fixed by Inertia Lua",
+        "Matcha destroying you? Sounds like you need Inertia Lua",
+    },
+    Toxic = {
+        "That cheat is begging for mercy. Grab Inertia Lua.",
+        "Stop injecting garbage, {name}, your cheat is crying. Try Inertia Lua.",
+        "Bro your lua is on life support. Install Inertia Lua.",
+        "Your cheat just waved a white flag. Use Inertia Lua now.",
+        "Downloaded that from a cereal box, {name}? Get Inertia Lua.",
+        "Your lua needs therapy. Grab Inertia Lua.",
+        "That script is coughing and dying. Try Inertia Lua.",
+        "Bro injected a potato. Upgrade to Inertia Lua, {name}.",
+        "That lua is held together by duct tape. Grab Inertia Lua.",
+        "Even your cheat is embarrassed {name}. Switch to Inertia Lua.",
+    },
+}
+local bmCfg = {
+    enabled = false,
+    textType = "Inertia",
+    interval = 10,
+    killBmEnabled = false,
+    killBmDistance = 50,
+    autoThread = nil,
+}
+local playerDeathHistory = {}
+
+local function sendChatMessage(message)
+    if not message or message == "" then return end
+    
+
+    local tcs = game:GetService("TextChatService")
+    local success1 = pcall(function()
+        if tcs and tcs.TextChannels and tcs.TextChannels.RBXGeneral then
+            tcs.TextChannels.RBXGeneral:SendAsync(message)
+        end
+    end)
+    if success1 then return end
+    
+
+    local rs = game:GetService("ReplicatedStorage")
+    local success2 = pcall(function()
+        local remote = rs:FindFirstChild("DefaultChatSystemChatEvents") and rs.DefaultChatSystemChatEvents:FindFirstChild("SayMessageRequest")
+        if remote then
+            remote:FireServer(message, "All")
+        end
+    end)
+    if success2 then return end
+
+
+    pcall(function()
+        setclipboard(message)
+        keypress(0xBF)
+        task.wait(0.05)
+        keyrelease(0xBF)
+        task.wait(0.1)
+        keypress(0x11) 
+        keypress(0x56) 
+        task.wait(0.05)
+        keyrelease(0x56)
+        keyrelease(0x11)
+        task.wait(0.05)
+        keypress(0x0D) 
+        keyrelease(0x0D)
+    end)
+end
+
+local function formatBm(msg, targetPlayer)
+    local name = targetPlayer and targetPlayer.Name or "Kid"
+    local dist = "0"
+    if targetPlayer then
+        local lp = game:GetService("Players").LocalPlayer
+        local char = lp.Character
+        local tChar = targetPlayer.Character
+        if char and tChar and char:FindFirstChild("HumanoidRootPart") and tChar:FindFirstChild("HumanoidRootPart") then
+            dist = tostring(math.floor((char.HumanoidRootPart.Position - tChar.HumanoidRootPart.Position).Magnitude))
+        end
+    end
+    
+    local formatted = msg:gsub("{name}", name):gsub("{dist}", dist)
+    return formatted
+end
+
+local function sendBmMessage(target)
+    local list = bmMessages[bmCfg.textType] or bmMessages["Inertia"]
+    local rawMsg = list[math.random(1, #list)]
+    local finalMsg = formatBm(rawMsg, target)
+    sendChatMessage(finalMsg)
+end
+
+local function startBmAuto()
+    if bmCfg.autoThread then return end
+    bmCfg.autoThread = task.spawn(function()
+        while bmCfg.enabled do
+            sendBmMessage()
+            task.wait(bmCfg.interval)
+        end
+        bmCfg.autoThread = nil
+    end)
+end
+
+local function stopBmAuto()
+    bmCfg.enabled = false
+    if bmCfg.autoThread then
+        task.cancel(bmCfg.autoThread)
+        bmCfg.autoThread = nil
+    end
+end
+
+task.spawn(function()
+    while true do
+        task.wait(0.1)
+        if bmCfg.killBmEnabled then
+            local lp = game:GetService("Players").LocalPlayer
+            local myHRP = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+            
+            for _, p in ipairs(game:GetService("Players"):GetPlayers()) do
+                if p ~= lp then
+                    local char = p.Character
+                    local hum = char and char:FindFirstChild("Humanoid")
+                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                    
+                    if hum and hrp and myHRP then
+                        local isDead = hum.Health <= 0
+                        local dist = (hrp.Position - myHRP.Position).Magnitude
+                        
+                        if isDead and dist <= bmCfg.killBmDistance then
+                            if not playerDeathHistory[p.UserId] or (os.clock() - playerDeathHistory[p.UserId] > 10) then
+                                playerDeathHistory[p.UserId] = os.clock()
+                                sendBmMessage(p)
+                            end
+                        elseif not isDead then
+                            playerDeathHistory[p.UserId] = nil
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+local indLeft = Drawing.new("Text")
+indLeft.Text = "<"
+indLeft.Size = 40
+indLeft.Center = true
+indLeft.Outline = true
+indLeft.Visible = false
+indLeft.Color = Color3.new(1, 1, 1)
+local indRight = Drawing.new("Text")
+indRight.Text = ">"
+indRight.Size = 40
+indRight.Center = true
+indRight.Outline = true
+indRight.Visible = false
+indRight.Color = Color3.new(1, 1, 1)
+local autoShootVelocityText = Drawing.new("Text")
+autoShootVelocityText.Text = "0"
+autoShootVelocityText.Size = 26
+autoShootVelocityText.Center = true
+autoShootVelocityText.Outline = true
+autoShootVelocityText.Visible = false
+autoShootVelocityText.Color = Color3.new(1, 1, 1)
+autoShootVelocityText.Transparency = 1
+pcall(function()
+    autoShootVelocityText.Font = Drawing.Fonts.Monospace
+end)
+pcall(function()
+    autoShootVelocityText.FontSize = 26
+end)
+pcall(function()
+    autoShootVelocityText.ZIndex = 1000
+end)
+local function updateIndicators()
+    if not cfg.player.showIndicators or not cfg.player.manualsEnabled or not cfg.player.enabled then
+        pcall(function() indLeft.Visible = false end)
+        pcall(function() indRight.Visible = false end)
+        return
+    end
+    local cam = workspace.CurrentCamera
+    if not cam then return end
+    
+    local viewport = cam.ViewportSize
+    local cx = viewport.X / 2
+    local cy = viewport.Y / 2
+    
+    pcall(function()
+        indLeft.Size = 40 * cfg.player.indicatorsScale
+        indRight.Size = 40 * cfg.player.indicatorsScale
+        
+        indLeft.Position = Vector2.new(cx - cfg.player.indicatorsOffset, cy)
+        indRight.Position = Vector2.new(cx + cfg.player.indicatorsOffset, cy)
+        
+        indLeft.Visible = true
+        indRight.Visible = true
+        
+        if cfg.player.manualDirection == "Left" then
+            indLeft.Color = Color3.new(0.5, 0.8, 1)
+            indRight.Color = Color3.new(1, 1, 1)
+        elseif cfg.player.manualDirection == "Right" then
+            indLeft.Color = Color3.new(1, 1, 1)
+            indRight.Color = Color3.new(0.5, 0.8, 1)
+        else
+            indLeft.Color = Color3.new(1, 1, 1)
+            indRight.Color = Color3.new(1, 1, 1)
+        end
+    end)
+end
+local OFF_PRIMITIVE = 0x148
+local OFF_CFRAME = 0xC0
+local OFF_HUMANOID_FLOOR_MATERIAL = 0x190
+local OFF_HUMANOID_JUMP_POWER = 0x1B0
+local FLOOR_MATERIAL_AIR = 1792
+local SOURCE_STOP_SPEED = 10
+local SOURCE_FRICTION = 5
+local SOURCE_GROUND_ACCEL = 35
+local SOURCE_AIR_ACCEL = 100
+local SOURCE_GROUND_GAIN = 80
+local SOURCE_AIR_GAIN = 120
+local SOURCE_TURN_RATE = 18
+local bunnyHopJumpLocked = false
+local lastJumpTick = 0
+local lastMovementTick = os.clock()
+local function getPrimitive(part)
+    local addr = part.Address
+    if not addr or addr == 0 then return nil end
+    local prim = memory_read("uintptr_t", addr + OFF_PRIMITIVE)
+    if not prim or prim == 0 then return nil end
+    return prim
+end
+local function writeRot(primAddr, r0, r1, r2, u0, u1, u2, b0, b1, b2)
+    local base = primAddr + OFF_CFRAME
+    memory_write("float", base + 0x00, r0)
+    memory_write("float", base + 0x04, r1)
+    memory_write("float", base + 0x08, r2)
+    memory_write("float", base + 0x0C, u0)
+    memory_write("float", base + 0x10, u1)
+    memory_write("float", base + 0x14, u2)
+    memory_write("float", base + 0x18, b0)
+    memory_write("float", base + 0x1C, b1)
+    memory_write("float", base + 0x20, b2)
+end
+local function setPitchYaw(primAddr, pitch, yaw)
+    local cy = math.cos(yaw)
+    local sy = math.sin(yaw)
+    local cp = math.cos(pitch)
+    local sp = math.sin(pitch)
+    writeRot(primAddr, cy, 0, -sy, sy * sp, cp, cy * sp, sy * cp, -sp, cy * cp)
+end
+local function getCamLookYaw()
+    local cam = workspace.CurrentCamera
+    if not cam then return 0 end
+    local camAddr = cam.Address
+    if not camAddr or camAddr == 0 then return 0 end
+    local bx = memory_read("float", camAddr + 0xF8 + 0x18)
+    local bz = memory_read("float", camAddr + 0xF8 + 0x20)
+    return math.atan2(-bx, -bz)
+end
+local function isAlive(p)
+    local char = p and p.Character
+    if not char then return false end
+    local hum = nil
+    pcall(function() hum = char:FindFirstChildOfClass("Humanoid") end)
+    return hum and hum.Health > 0
+end
+
+local function getHRP(p)
+    local char = p and p.Character
+    if not char then return nil end
+    local hrp = nil
+    pcall(function() hrp = char:FindFirstChild("HumanoidRootPart") end)
+    return hrp
+end
+local function getPlanarSpeed(part)
+    if not part then return 0 end
+    local vel = part.AssemblyLinearVelocity or part.Velocity
+    local vx = vel.X or vel.x or 0
+    local vz = vel.Z or vel.z or 0
+    return math.sqrt((vx * vx) + (vz * vz))
+end
+local function getVectorXZ(vec)
+    if not vec then
+        return 0, 0
+    end
+    return vec.X or vec.x or 0, vec.Z or vec.z or 0
+end
+local function normalizeXZ(x, z)
+    local len = math.sqrt((x * x) + (z * z))
+    if len <= 0.001 then
+        return 0, 0, 0
+    end
+    return x / len, z / len, len
+end
+local function getMemoryCameraBasisXZ()
+    local yaw = getCamLookYaw()
+    local forwardX = -math.sin(yaw)
+    local forwardZ = -math.cos(yaw)
+    local rightX = math.cos(yaw)
+    local rightZ = -math.sin(yaw)
+    return forwardX, forwardZ, rightX, rightZ
+end
+local function isKeyHeld(vk)
+    if type(iskeypressed) == "function" then
+        local ok, pressed = pcall(iskeypressed, vk)
+        if ok then
+            return pressed == true
+        end
+    end
+
+    return false
+end
+local function getMovementInputAxes()
+    local forward = 0
+    local side = 0
+    if isKeyHeld(0x57) then forward = forward + 1 end
+    if isKeyHeld(0x53) then forward = forward - 1 end
+    if isKeyHeld(0x44) then side = side + 1 end
+    if isKeyHeld(0x41) then side = side - 1 end
+
+    return forward, side
+end
+local function isBunnyHopGrounded(humanoid)
+    if not humanoid then return false end
+    local char = humanoid.Parent
+    if not char then return false end
+    local hrp = nil
+    pcall(function() hrp = char:FindFirstChild("HumanoidRootPart") end)
+    if not hrp then return false end
+
+    local vy = hrp.Velocity.y or hrp.Velocity.Y or 0
+    if vy > 1.5 then return false end
+
+    local ok, material = pcall(function() return humanoid.FloorMaterial end)
+    if ok and material ~= nil then
+        local materialName = tostring(material)
+        if materialName ~= "Air" and materialName ~= "Enum.Material.Air" and materialName ~= "" then
+            return true
+        end
+    end
+
+    local floorMat = nil
+    pcall(function()
+        local addr = humanoid.Address
+        if addr and addr ~= 0 then
+            floorMat = memory_read("int", addr + OFF_HUMANOID_FLOOR_MATERIAL)
+        end
+    end)
+    if type(floorMat) == "number" then
+        if floorMat ~= FLOOR_MATERIAL_AIR then
+            return true
+        end
+    end
+
+    return false
+end
+local function getHumanoidJumpPower(humanoid)
+    if not humanoid then
+        return 50
+    end
+
+    local jumpPower = nil
+    pcall(function()
+        local addr = humanoid.Address
+        if addr and addr ~= 0 then
+            jumpPower = memory_read("float", addr + OFF_HUMANOID_JUMP_POWER)
+        end
+    end)
+    if type(jumpPower) == "number" and jumpPower > 0 then
+        return jumpPower
+    end
+
+    return 50
+end
+local function getBunnyHopWishDir(humanoid)
+    local forward, side = getMovementInputAxes()
+    if forward == 0 and side == 0 then
+        return 0, 0, 0
+    end
+
+
+    local cam = workspace.CurrentCamera
+    local camAddr = (cam and cam.Address) or 0
+    if camAddr == 0 then return 0, 0, 0 end
+
+    local bx = memory_read("float", camAddr + 0xF8 + 0x18)
+    local bz = memory_read("float", camAddr + 0xF8 + 0x20)
+    
+
+    local lx, lz = bx, -bz
+    local rx, rz = bz, bx
+    
+    local lookLen = math.sqrt(lx*lx + lz*lz)
+    local rightLen = math.sqrt(rx*rx + rz*rz)
+    if lookLen > 0 then lx, lz = lx/lookLen, lz/lookLen end
+    if rightLen > 0 then rx, rz = rx/rightLen, rz/rightLen end
+
+    local wishX = (lx * forward) + (rx * side)
+    local wishZ = (lz * forward) + (rz * side)
+    
+    return normalizeXZ(wishX, wishZ)
+end
+local function blendPlanarDir(currentX, currentZ, targetX, targetZ, factor)
+    local blendedX = (currentX * (1 - factor)) + (targetX * factor)
+    local blendedZ = (currentZ * (1 - factor)) + (targetZ * factor)
+    local dirX, dirZ, dirLen = normalizeXZ(blendedX, blendedZ)
+    if dirLen <= 0.001 then
+        return targetX, targetZ
+    end
+    return dirX, dirZ
+end
+local function applyPlanarFriction(vx, vz, dt)
+    local speed = math.sqrt((vx * vx) + (vz * vz))
+    if speed < 0.001 then
+        return 0, 0
+    end
+
+    local control = math.max(speed, SOURCE_STOP_SPEED)
+    local drop = control * SOURCE_FRICTION * dt
+    local newSpeed = math.max(speed - drop, 0)
+    if newSpeed >= speed then
+        return vx, vz
+    end
+
+    local scale = newSpeed / speed
+    return vx * scale, vz * scale
+end
+local function acceleratePlanar(vx, vz, wishDirX, wishDirZ, wishSpeed, accel, dt, speedCap)
+    if wishSpeed <= 0 then
+        return vx, vz
+    end
+
+    local cappedWishSpeed = wishSpeed
+    if speedCap and speedCap > 0 and cappedWishSpeed > speedCap then
+        cappedWishSpeed = speedCap
+    end
+
+    local currentSpeed = (vx * wishDirX) + (vz * wishDirZ)
+    local addSpeed = cappedWishSpeed - currentSpeed
+    if addSpeed <= 0 then
+        return vx, vz
+    end
+
+    local accelSpeed = accel * wishSpeed * dt
+    if accelSpeed > addSpeed then
+        accelSpeed = addSpeed
+    end
+
+    return vx + (wishDirX * accelSpeed), vz + (wishDirZ * accelSpeed)
+end
+local function getPlanarSpeedFromValues(vx, vz)
+    return math.sqrt((vx * vx) + (vz * vz))
+end
+local function clampPlanarSpeed(vx, vz, maxSpeed)
+    local speed = getPlanarSpeedFromValues(vx, vz)
+    if speed <= maxSpeed or speed <= 0.001 then
+        return vx, vz
+    end
+
+    local scale = maxSpeed / speed
+    return vx * scale, vz * scale
+end
+local function writePlanarVelocity(hrp, vx, vz, vy)
+    local curVel = hrp.AssemblyLinearVelocity or hrp.Velocity
+    local finalY = vy or (curVel and (curVel.y or curVel.Y)) or 0
+    
+    local newVelocity = Vector3.new(vx, finalY, vz)
+    
+    pcall(function()
+        if hrp.AssemblyLinearVelocity then
+            hrp.AssemblyLinearVelocity = newVelocity
+        else
+            hrp.Velocity = newVelocity
+        end
+    end)
+end
+local function updateCFrameBhop(humanoid, hrp, dt)
+    if not cfg.misc.cframeBhopEnabled then
+        bunnyHopJumpLocked = false
+        return
+    end
+    if not humanoid or not hrp then
+        bunnyHopJumpLocked = false
+        return
+    end
+
+    local holdingSpace = true
+    if cfg.misc.cframeBhopRequireSpace then
+        holdingSpace = isKeyHeld(0x20)
+    end
+    if not holdingSpace then
+        bunnyHopJumpLocked = false
+        return
+    end
+
+    local vel = hrp.AssemblyLinearVelocity or hrp.Velocity
+    local vx, vz = getVectorXZ(vel)
+    local currentVy = (vel and (vel.Y or vel.y)) or 0
+    local dirX, dirZ, dirLen = getBunnyHopWishDir(humanoid)
+
+    local deltaTime = math.max(dt or 0.01, 0.008)
+    local grounded = isBunnyHopGrounded(humanoid)
+    local maxSpeed = math.max(40, tonumber(cfg.misc.cframeBhopMaxSpeed) or 160)
+    local shouldWrite = false
+    local planarSpeed = getPlanarSpeedFromValues(vx, vz)
+
+    local targetVy = nil 
+    local now = os.clock()
+
+    if grounded and not bunnyHopJumpLocked and (now - lastJumpTick > 0.15) then
+        targetVy = tonumber(cfg.misc.cframeBhopJumpHeight) or 50
+        bunnyHopJumpLocked = true
+        lastJumpTick = now
+        shouldWrite = true
+    elseif not grounded then
+        bunnyHopJumpLocked = false
+    end
+
+    if dirLen > 0.001 then
+        local moveDirX, moveDirZ = dirX, dirZ
+        local currentDirX, currentDirZ, currentDirLen = normalizeXZ(vx, vz)
+        if currentDirLen > 0.001 then
+            local turnFactor = math.min(1, SOURCE_TURN_RATE * deltaTime)
+            if grounded then
+                turnFactor = math.min(1, turnFactor * 1.75)
+            end
+            moveDirX, moveDirZ = blendPlanarDir(currentDirX, currentDirZ, dirX, dirZ, turnFactor)
+        end
+
+        if grounded and not holdingSpace then
+            vx, vz = applyPlanarFriction(vx, vz, deltaTime)
+        end
+
+        local desiredWishSpeed = math.max(planarSpeed, grounded and 26 or 20)
+        local accel = grounded and SOURCE_GROUND_ACCEL or SOURCE_AIR_ACCEL
+        vx, vz = acceleratePlanar(vx, vz, moveDirX, moveDirZ, desiredWishSpeed, accel, deltaTime)
+
+        local gain = (grounded and SOURCE_GROUND_GAIN or SOURCE_AIR_GAIN) * deltaTime
+        local newSpeed = math.min(maxSpeed, math.max(getPlanarSpeedFromValues(vx, vz), planarSpeed, grounded and 24 or 18) + gain)
+        vx, vz = moveDirX * newSpeed, moveDirZ * newSpeed
+        shouldWrite = true
+    elseif grounded and not holdingSpace then
+        vx, vz = applyPlanarFriction(vx, vz, deltaTime)
+        shouldWrite = true
+    elseif shouldWrite then
+        local speed = getPlanarSpeedFromValues(vx, vz)
+        if speed > maxSpeed then
+            vx, vz = clampPlanarSpeed(vx, vz, maxSpeed)
+        end
+    end
+
+    vx, vz = clampPlanarSpeed(vx, vz, maxSpeed)
+
+    if shouldWrite then
+        writePlanarVelocity(hrp, vx, vz, targetVy)
+    end
+end
+local function updateAutoJump(humanoid)
+    if not cfg.misc.autoJumpEnabled then return end
+    
+    local grounded = isBunnyHopGrounded(humanoid)
+    if grounded and (os.clock() - lastJumpTick > 0.15) then
+        lastJumpTick = os.clock()
+        pcall(function()
+            if cfg.misc.noJumpCooldown then
+                humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+            end
+            humanoid.Jump = true
+        end)
+    end
+end
+RunService.Heartbeat:Connect(function(dt)
+    local success, err = pcall(function()
+        local char = LocalPlayer and LocalPlayer.Character
+        if not (char and char.Parent) then return end
+        local humanoid = char:FindFirstChild("Humanoid")
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if humanoid and hrp then
+            updateCFrameBhop(humanoid, hrp, dt)
+            updateAutoJump(humanoid)
+        end
+    end)
+    if not success then
+        warn("[Movement Error]", tostring(err))
+    end
+end)
+local function refreshTarget()
+    local Players = game:GetService("Players")
+    local LocalPlayer = Players.LocalPlayer
+    local myHRP = getHRP(LocalPlayer)
+    if not myHRP then targetPlayer = nil return end
+    local myPos = myHRP.Position
+    local best, bestDist = nil, math.huge
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p.Name ~= LocalPlayer.Name and isAlive(p) then
+            local onTeam = cfg.player.isTeamCheck and p.Team == LocalPlayer.Team
+            if not onTeam then
+                local hrp = getHRP(p)
+                if hrp then
+                    local dist = math.huge
+                    if cfg.player.targetMode == "Closest" then
+                        dist = (hrp.Position - myPos).Magnitude
+                    end
+                    if dist and dist < bestDist then
+                        bestDist, best = dist, p
+                    end
+                end
+            end
+        end
+    end
+    targetPlayer = best
+end
+local ContextActionService = game:GetService("ContextActionService")
+local fovConnection = nil
+local lastCam = nil
+local isAimingFov = false
+pcall(function()
+    ContextActionService:BindActionAtPriority(
+        "FovAimBypass",
+        function(actionName, state, inputObject)
+            if state == Enum.UserInputState.Begin then
+                isAimingFov = true
+            elseif state == Enum.UserInputState.End then
+                isAimingFov = false
+            end
+            if cfg.misc.fovEnabled then
+                local cam = workspace.CurrentCamera
+                if cam then
+                    cam.FieldOfView = isAimingFov and 70 or cfg.misc.fovValue
+                end
+            end
+            return Enum.ContextActionResult.Pass
+        end,
+        false,
+        9999999,
+        Enum.UserInputType.MouseButton1,
+        Enum.UserInputType.MouseButton2
+    )
+end)
+local function updateFovHook()
+    local cam = workspace.CurrentCamera
+    if not cam then return end
+    if cam ~= lastCam then
+        if fovConnection then 
+            pcall(function() fovConnection:Disconnect() end)
+            fovConnection = nil
+        end
+        lastCam = cam
+        pcall(function()
+            fovConnection = cam:GetPropertyChangedSignal("FieldOfView"):Connect(function()
+                if cfg.misc.fovEnabled then
+                    local target = isAimingFov and 70 or cfg.misc.fovValue
+                    if cam.FieldOfView ~= target then
+                        cam.FieldOfView = target
+                    end
+                end
+            end)
+        end)
+    end
+end
+local function getCurrentVelocityMagnitude()
+    local hrp = getHRP(LocalPlayer)
+    if not hrp then return 0 end
+    local vel = hrp.Velocity
+    if not vel then return 0 end
+    local x = vel.X or vel.x or 0
+    local y = vel.Y or vel.y or 0
+    local z = vel.Z or vel.z or 0
+    return math.sqrt((x * x) + (y * y) + (z * z))
+end
+local function updateAutoShootVelocityText()
+    if not cfg.ragebot.showVelocity then
+        pcall(function() autoShootVelocityText.Visible = false end)
+        return
+    end
+    local cam = workspace.CurrentCamera
+    if not cam then
+        pcall(function() autoShootVelocityText.Visible = false end)
+        return
+    end
+    pcall(function()
+        local currentText = math.floor(currentVelocityMagnitude + 0.5)
+        local maxText = math.floor(currentVelocityMax + 0.5)
+        autoShootVelocityText.Text = "V: " .. tostring(currentText) .. "  VMax: " .. tostring(maxText)
+        autoShootVelocityText.Position = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2 + 42)
+        autoShootVelocityText.Visible = true
+    end)
+end
+task.spawn(function()
+    while true do
+        task.wait()
+        local success, err = pcall(function()
+            currentVelocityMagnitude = getCurrentVelocityMagnitude()
+            if cfg.ragebot.showVelocity and currentVelocityMagnitude > currentVelocityMax then
+                currentVelocityMax = currentVelocityMagnitude
+            end
+            updateAutoShootVelocityText()
+            local canShootConditions = cfg.ragebot.enabled and (type(isrbxactive) ~= "function" or isrbxactive())
+            local isTriggered = false
+            if canShootConditions then
+                local held = false
+                local _iskeypressed = iskeypressed
+                if currentHoldKeyInt == 1 and type(ismouse1pressed) == "function" then
+                    held = ismouse1pressed()
+                elseif currentHoldKeyInt == 2 and type(ismouse2pressed) == "function" then
+                    held = ismouse2pressed()
+                elseif _iskeypressed then
+                    pcall(function() held = _iskeypressed(currentHoldKeyInt) end)
+                end
+                if held then isTriggered = true end
+            end
+            local lowVelocity = tonumber(cfg.ragebot.lowVelocity) or 0
+            local highVelocityEnabled = cfg.ragebot.highVelocityEnabled == true
+            local highVelocity = tonumber(cfg.ragebot.highVelocity) or 200
+            local intervalMs = tonumber(cfg.ragebot.intervalMs) or 0
+            local interval = intervalMs / 1000
+            local preDelayMs = tonumber(cfg.ragebot.preDelayMs) or 0
+            local preDelay = preDelayMs / 1000
+            
+            local isLowTrigger = currentVelocityMagnitude <= (lowVelocity + 0.05)
+            local isHighTrigger = highVelocityEnabled and currentVelocityMagnitude >= highVelocity
+            local inBounds = isLowTrigger or isHighTrigger
+            
+            local shouldShoot = canShootConditions and isTriggered and inBounds
+            
+            if shouldShoot then
+                if not isWaitingToShoot then
+                    isWaitingToShoot = true
+                    autoShootDelayStart = tick()
+                end
+                
+                local now = tick()
+                if (now - autoShootDelayStart >= preDelay) then
+                    if (now - autoShootLastClick >= interval) then
+                        autoShootLastClick = now
+                        wasAutoShooting = true
+                        
+                        pcall(function()
+                            if type(mouse1click) == "function" then
+                                mouse1click()
+                            elseif type(mouse1press) == "function" and type(mouse1release) == "function" then
+                                mouse1press()
+                                task.wait(0.01)
+                                mouse1release()
+                            elseif type(mouse1press) == "function" then
+                                mouse1press()
+                                task.delay(0.02, function()
+                                    pcall(mouse1release)
+                                end)
+                            end
+                        end)
+                    end
+                end
+            else
+                isWaitingToShoot = false
+            end
+        end)
+        if not success then
+            warn("[AutoShoot Error]", tostring(err))
+            task.wait(0.05)
+        end
+    end
+end)
+task.spawn(function()
+    local lastT = tick()
+    while true do
+        task.wait()
+        local now = tick()
+        local dt = math.min(now - lastT, 0.1)
+        lastT = now
+        local success, err = pcall(function()
+            local LP = LocalPlayer
+            local char = LP and LP.Character
+            if not char then return end
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            local humanoid = char:FindFirstChildOfClass("Humanoid")
+            if not hrp then return end
+            updateFovHook()
+            if cfg.misc.fovEnabled then
+                local cam = workspace.CurrentCamera
+                if cam then
+                    local target = isAimingFov and 70 or cfg.misc.fovValue
+                    pcall(function() 
+                        if cam.FieldOfView ~= target then
+                            cam.FieldOfView = target 
+                        end
+                    end)
+                end
+            end
+            
+            if cfg.spinner.enabled then
+                local hrpPrim = getPrimitive(hrp)
+                if hrpPrim then
+                    local sRad = 0
+                    if cfg.spinner.randomAngles then
+                        sRad = math.rad(math.random(0, 360))
+                    else
+                        spinAngle = (spinAngle + (cfg.spinner.spinSpeed / 100) * 5000 * dt) % 360
+                        sRad = math.rad(spinAngle)
+                    end
+                    local pitch = cfg.misc.flipEnabled and math.pi or 0
+                    setPitchYaw(hrpPrim, pitch, sRad)
+                end
+                return
+            end
+            if not cfg.player.enabled then
+                if cfg.misc.flipEnabled then
+                    local hrpPrim = getPrimitive(hrp)
+                    if hrpPrim then
+                        setPitchYaw(hrpPrim, math.pi, getCamLookYaw())
+                    end
+                end
+                return
+            end
+            if cfg.player.targetMode ~= "None" then
+                refreshTarget()
+            else
+                targetPlayer = nil
+            end
+            local myPos = hrp.Position
+            local baseYaw = getCamLookYaw()
+            if cfg.player.targetMode ~= "None" and targetPlayer then
+                local tHRP = getHRP(targetPlayer)
+                if tHRP then
+                    local d = tHRP.Position - myPos
+                    baseYaw = math.atan2(-d.X, d.Z)
+                end
+            end
+            pcall(updateIndicators)
+            local finalYaw = baseYaw
+            local manualsActive = cfg.player.manualsEnabled and cfg.player.manualDirection ~= "None"
+            if manualsActive then
+                if cfg.player.manualDirection == "Left" then
+                    finalYaw = finalYaw + math.rad(cfg.player.leftYaw)
+                elseif cfg.player.manualDirection == "Right" then
+                    finalYaw = finalYaw + math.rad(cfg.player.rightYaw)
+                end
+            end
+            local modeYaw = 0
+            if cfg.player.yawMode == "Static" then
+                modeYaw = cfg.player.yawValue
+            elseif cfg.player.yawMode == "Spin" then
+                spinAngleActive = (spinAngleActive + (100 * dt * 5)) % 360
+                modeYaw = spinAngleActive
+            elseif cfg.player.yawMode == "Sway" then
+                modeYaw = math.sin(now * cfg.player.swaySpeed) * cfg.player.swayRange
+            end
+            finalYaw = finalYaw + math.rad(modeYaw)
+            local canJitter = true
+            if (cfg.player.yawMode == "Sway" or cfg.player.yawMode == "Spin") and not manualsActive then
+                canJitter = false
+            end
+            if cfg.player.jitterEnabled and canJitter then
+                local speed = math.max(0.1, cfg.player.jitterSpeed)
+                local jitterInterval = 1 / speed
+                if now - lastJitterTime >= jitterInterval then
+                    lastJitterTime = now
+                    jitterState = not jitterState
+                    local halfAngle = cfg.player.jitterValue / 2
+                    if cfg.player.jitterRandom then
+                        currentJitterOffset = (math.random() * cfg.player.jitterValue) - halfAngle
+                    else
+                        currentJitterOffset = jitterState and halfAngle or -halfAngle
+                    end
+                end
+                finalYaw = finalYaw + math.rad(currentJitterOffset)
+            end
+            if cfg.player.bodyYaw == "Static" then
+                finalYaw = finalYaw + math.rad(cfg.player.bodyYawValue)
+            elseif cfg.player.bodyYaw == "Opposite" then
+                finalYaw = finalYaw + math.pi
+            end
+            local hrpPrim = getPrimitive(hrp)
+            if hrpPrim then
+                local pitch = cfg.misc.flipEnabled and math.pi or 0
+                setPitchYaw(hrpPrim, pitch, finalYaw)
+            end
+        end)
+        if not success then
+            warn("[Anti-Aim Error]", tostring(err))
+            print("[Anti-Aim Error]", tostring(err))
+        end
+    end
+end)
+local Window = Arcane:CreateWindow("@code.leak", Vector2.new(660, 480), "Midnight")
+Window:CreateTabSection("Modes")
+local tabRageBot = Window:CreateTab("RageBot")
+local secAutoShoot = Window:CreateSection("Velocity AutoShoot", "RageBot")
+local toggleAutoShoot = secAutoShoot:AddToggle("Enable", false, function(v)
+    cfg.ragebot.enabled = v
+    Arcane:Notify("RageBot", "AutoShoot " .. (v and "[ON]" or "[OFF]"), 3)
+end)
+local holdKeyLabel = nil
+pcall(function()
+    holdKeyLabel = secAutoShoot:AddLabel("Hold Key: [V]")
+end)
+secAutoShoot:AddButton("Set Hold Key (press after click)", function()
+    holdKeyWaitingRebind = true
+    pcall(function() holdKeyLabel.Text = "Hold Key: [waiting...]" end)
+    task.spawn(function()
+        task.wait(0.25)
+        local deadline = os.clock() + 8
+        while holdKeyWaitingRebind and os.clock() < deadline do
+            if type(ismouse1pressed) == "function" and ismouse1pressed() then
+                currentHoldKeyInt = 1
+                holdKeyWaitingRebind = false
+            elseif type(ismouse2pressed) == "function" and ismouse2pressed() then
+                currentHoldKeyInt = 2
+                holdKeyWaitingRebind = false
+            else
+                for _, vk in ipairs(VK_CODES) do
+                    local ok, pressed = pcall(iskeypressed, vk)
+                    if ok and pressed then
+                        holdKeyWaitingRebind = false
+                        currentHoldKeyInt = vk
+                        break
+                    end
+                end
+            end
+            if not holdKeyWaitingRebind then
+                local name = VK_NAMES[currentHoldKeyInt] or tostring(currentHoldKeyInt)
+                pcall(function()
+                    holdKeyLabel.Text = "Hold Key: [" .. name .. "]"
+                end)
+                return
+            end
+            task.wait(0.05)
+        end
+        if holdKeyWaitingRebind then
+            holdKeyWaitingRebind = false
+            pcall(function()
+                holdKeyLabel.Text = "Hold Key: [" .. (VK_NAMES[currentHoldKeyInt] or tostring(currentHoldKeyInt)) .. "]"
+            end)
+        end
+    end)
+end)
+secAutoShoot:AddSlider("Low Velocity", {Min = 0, Max = 200, Default = 20, Callback = function(v)
+    cfg.ragebot.lowVelocity = v
+end})
+secAutoShoot:AddToggle("Enable High Velocity", false, function(v)
+    cfg.ragebot.highVelocityEnabled = v
+end)
+secAutoShoot:AddSlider("High Velocity", {Min = 0, Max = 200, Default = 200, Callback = function(v)
+    cfg.ragebot.highVelocity = v
+end})
+secAutoShoot:AddSlider("Interval (ms)", {Min = 0, Max = 1000, Default = 80, Callback = function(v)
+    cfg.ragebot.intervalMs = v
+end})
+secAutoShoot:AddSlider("Delay (ms)", {Min = 0, Max = 500, Default = 0, Callback = function(v)
+    cfg.ragebot.preDelayMs = v
+end})
+secAutoShoot:AddToggle("Show Current Velocity", false, function(v)
+    cfg.ragebot.showVelocity = v
+    if not v then
+        currentVelocityMax = 0
+        pcall(function() autoShootVelocityText.Visible = false end)
+    end
+end)
+local tabPlayer = Window:CreateTab("Player")
+local secMain = Window:CreateSection("Main", "Player")
+local toggleEnable = secMain:AddToggle("Enable", false, function(v)
+    cfg.player.enabled = v
+    if not v then pcall(updateIndicators) end
+    Arcane:Notify("AntiAim", "Player Anti-Aim " .. (v and "[ON]" or "[OFF]"), 3)
+end)
+secMain:AddDropdown("Target Mode", {"None", "Closest"}, "None", function(v)
+    cfg.player.targetMode = v
+    Arcane:Notify("AntiAim", "Target Mode: " .. v, 3)
+end)
+secMain:AddToggle("Team Check", false, function(v)
+    cfg.player.isTeamCheck = v
+    Arcane:Notify("AntiAim", "Team Check " .. (v and "[ON]" or "[OFF]"), 3)
+end)
+secMain:AddDropdown("Yaw Base", {"Static", "Spin", "Sway"}, "Static", function(v)
+    cfg.player.yawMode = v
+end)
+secMain:AddSlider("Yaw Value", {Min = -180, Max = 180, Default = 0, Callback = function(v)
+    cfg.player.yawValue = v
+end})
+secMain:AddSlider("Sway Range", {Min = 0, Max = 180, Default = 60, Callback = function(v)
+    cfg.player.swayRange = v
+end})
+secMain:AddSlider("Sway Speed", {Min = 0.1, Max = 10, Default = 1, Callback = function(v)
+    cfg.player.swaySpeed = v
+end})
+local secManuals = Window:CreateSection("Manuals", "Player")
+secManuals:AddToggle("Manuals Enabled", false, function(v)
+    cfg.player.manualsEnabled = v
+    if not v then pcall(updateIndicators) end
+    Arcane:Notify("AntiAim", "Manuals " .. (v and "[ON]" or "[OFF]"), 3)
+end)
+secManuals:AddToggle("Show indicators", false, function(v)
+    cfg.player.showIndicators = v
+    pcall(updateIndicators)
+    Arcane:Notify("AntiAim", "Indicators " .. (v and "[ON]" or "[OFF]"), 3)
+end)
+secManuals:AddSlider("Indicators offset", {Min = 10, Max = 500, Default = 80, Callback = function(v)
+    cfg.player.indicatorsOffset = v
+end})
+secManuals:AddSlider("Indicators scale (%)", {Min = 10, Max = 500, Default = 100, Callback = function(v)
+    cfg.player.indicatorsScale = v / 100
+end})
+secManuals:AddSlider("Left Yaw", {Min = -180, Max = 180, Default = -30, Callback = function(v)
+    cfg.player.leftYaw = v
+end})
+secManuals:AddSlider("Right Yaw", {Min = -180, Max = 180, Default = 30, Callback = function(v)
+    cfg.player.rightYaw = v
+end})
+secManuals:AddKeybind("Left Bind", "X", function()
+    if cfg.player.manualsEnabled then
+        cfg.player.manualDirection = cfg.player.manualDirection == "Left" and "None" or "Left"
+    end
+end, false)
+secManuals:AddKeybind("Right Bind", "C", function()
+    if cfg.player.manualsEnabled then
+        cfg.player.manualDirection = cfg.player.manualDirection == "Right" and "None" or "Right"
+    end
+end, false)
+local secBodyYaw = Window:CreateSection("Body Yaw", "Player")
+secBodyYaw:AddDropdown("Body Yaw", {"Off", "Static", "Opposite"}, "Off", function(v)
+    cfg.player.bodyYaw = v
+end)
+secBodyYaw:AddSlider("Body Yaw Value", {Min = -180, Max = 180, Default = 0, Callback = function(v)
+    cfg.player.bodyYawValue = v
+end})
+local secJitter = Window:CreateSection("Jitter", "Player")
+secJitter:AddToggle("Enable Jitter", false, function(v)
+    cfg.player.jitterEnabled = v
+    Arcane:Notify("AntiAim", "Jitter " .. (v and "[ON]" or "[OFF]"), 3)
+end)
+secJitter:AddSlider("Jitter Angle", {Min = 0, Max = 360, Default = 30, Callback = function(v)
+    cfg.player.jitterValue = v
+end})
+secJitter:AddSlider("Jitter Speed", {Min = 1, Max = 60, Default = 20, Callback = function(v)
+    cfg.player.jitterSpeed = v
+end})
+secJitter:AddToggle("Jitter Random", false, function(v)
+    cfg.player.jitterRandom = v
+    Arcane:Notify("AntiAim", "Jitter Random " .. (v and "[ON]" or "[OFF]"), 3)
+end)
+local tabSpinner = Window:CreateTab("Spinner")
+local secSpinbot = Window:CreateSection("Spinbot", "Spinner")
+local toggleSpin = secSpinbot:AddToggle("Enable", false, function(v)
+    cfg.spinner.enabled = v
+    if not v then spinAngle = 0 end
+    Arcane:Notify("AntiAim", "Spinbot " .. (v and "[ON]" or "[OFF]"), 3)
+end)
+secSpinbot:AddKeybind("Spinner Bind", "F5", function()
+    cfg.spinner.enabled = not cfg.spinner.enabled
+    toggleSpin:SetValue(cfg.spinner.enabled)
+    if not cfg.spinner.enabled then spinAngle = 0 end
+end, true)
+local secSpinnerSettings = Window:CreateSection("Settings", "Spinner")
+secSpinnerSettings:AddToggle("Random Angles", false, function(v)
+    cfg.spinner.randomAngles = v
+    Arcane:Notify("AntiAim", "Spinbot Random " .. (v and "[ON]" or "[OFF]"), 3)
+end)
+secSpinnerSettings:AddSlider("Spin Speed", {Min = 0, Max = 100, Default = 50, Callback = function(v)
+    cfg.spinner.spinSpeed = v
+end})
+local tabVisuals = Window:CreateTab("Hat Visuals")
+local secChinaHat = Window:CreateSection("China Hat 3D", "Hat Visuals")
+secChinaHat:AddToggle("Enable", false, function(v)
+    cfg.visuals.hatEnabled = v
+    Arcane:Notify("Hat Visuals", "China Hat " .. (v and "[ON]" or "[OFF]"), 3)
+end)
+secChinaHat:AddToggle("Rainbow Colors", false, function(v)
+    cfg.visuals.hatRainbow = v
+end)
+secChinaHat:AddColorPicker("Main Color", Color3.fromRGB(230, 217, 179), function(c)
+    cfg.visuals.hatMainColor = c
+end)
+secChinaHat:AddColorPicker("Outline Color", Color3.fromRGB(153, 102, 51), function(c)
+    cfg.visuals.hatOutlineColor = c
+end)
+secChinaHat:AddSlider("Radius", {Min = 1, Max = 100, Default = 40, Callback = function(v)
+    cfg.visuals.hatRadius = v / 20
+end})
+secChinaHat:AddSlider("Cone Height", {Min = 1, Max = 100, Default = 30, Callback = function(v)
+    cfg.visuals.hatHeight = v / 20
+end})
+secChinaHat:AddSlider("Segments (%)", {Min = 1, Max = 100, Default = 33, Callback = function(v)
+    cfg.visuals.hatSegments = math.max(4, math.floor((v / 100) * 48))
+end})
+secChinaHat:AddSlider("Rainbow Speed", {Min = 1, Max = 100, Default = 20, Callback = function(v)
+    cfg.visuals.hatRainbowSpeed = v / 20
+end})
+secChinaHat:AddSlider("Main Opacity (%)", {Min = 0, Max = 100, Default = 50, Callback = function(v)
+    cfg.visuals.hatMainOpacity = v
+end})
+secChinaHat:AddSlider("Outline Opacity (%)", {Min = 0, Max = 100, Default = 50, Callback = function(v)
+    cfg.visuals.hatOutlineOpacity = v
+end})
+local secNimb = Window:CreateSection("Nimb", "Hat Visuals")
+secNimb:AddToggle("Enable", false, function(v)
+    cfg.visuals.NimbEnabled = v
+    Arcane:Notify("Hat Visuals", "Nimb " .. (v and "[ON]" or "[OFF]"), 3)
+end)
+secNimb:AddToggle("Rainbow Colors", false, function(v)
+    cfg.visuals.NimbRainbow = v
+end)
+secNimb:AddColorPicker("Main Color", Color3.fromRGB(255, 215, 0), function(c)
+    cfg.visuals.NimbMainColor = c
+end)
+secNimb:AddColorPicker("Outline Color", Color3.fromRGB(255, 215, 0), function(c)
+    cfg.visuals.NimbOutlineColor = c
+end)
+secNimb:AddSlider("Radius", {Min = 1, Max = 100, Default = 20, Callback = function(v)
+    cfg.visuals.NimbRadius = v / 20
+end})
+secNimb:AddSlider("Height Offset", {Min = 1, Max = 100, Default = 20, Callback = function(v)
+    cfg.visuals.NimbHeight = v / 20
+end})
+secNimb:AddSlider("Tube Radius", {Min = 1, Max = 100, Default = 5, Callback = function(v)
+    cfg.visuals.NimbTubeRadius = v / 100
+end})
+secNimb:AddSlider("Segments", {Min = 4, Max = 100, Default = 25, Callback = function(v)
+    cfg.visuals.NimbSegments = v
+end})
+secNimb:AddSlider("Tube Segments", {Min = 3, Max = 16, Default = 10, Callback = function(v)
+    cfg.visuals.NimbTubeSegments = v
+end})
+secNimb:AddSlider("Rainbow Speed", {Min = 1, Max = 100, Default = 20, Callback = function(v)
+    cfg.visuals.NimbRainbowSpeed = v / 20
+end})
+secNimb:AddSlider("Main Opacity (%)", {Min = 0, Max = 100, Default = 100, Callback = function(v)
+    cfg.visuals.NimbMainOpacity = v
+end})
+secNimb:AddSlider("Outline Opacity (%)", {Min = 0, Max = 100, Default = 0, Callback = function(v)
+    cfg.visuals.NimbOutlineOpacity = v
+end})
+local tabSkins = Window:CreateTab("Misc Visuals")
+local tabMisc = Window:CreateTab("Misc")
+local secServerPos = Window:CreateSection("Server Position", "Misc Visuals")
+secServerPos:AddToggle("Enable Glow", false, function(v)
+    cfg.visuals.serverPosEnabled = v
+end)
+secServerPos:AddColorPicker("Glow Color", Color3.fromRGB(0, 255, 255), function(c)
+    cfg.visuals.serverPosColor = c
+end)
+secServerPos:AddSlider("Opacity (%)", {Min = 0, Max = 100, Default = 100, Callback = function(v)
+    cfg.visuals.serverPosOpacity = v
+end})
+secServerPos:AddSlider("Radius", {Min = 5, Max = 100, Default = 15, Callback = function(v)
+    cfg.visuals.serverPosRadius = v
+end})
+secServerPos:AddSlider("Sides (Shape)", {Min = 3, Max = 32, Default = 6, Callback = function(v)
+    cfg.visuals.serverPosSides = v
+end})
+secServerPos:AddSlider("Spin Speed", {Min = 0, Max = 100, Default = 10, Callback = function(v)
+    cfg.visuals.serverPosSpinSpeed = v / 10
+end})
+secServerPos:AddSlider("Pulse Effect", {Min = 0, Max = 100, Default = 50, Callback = function(v)
+    cfg.visuals.serverPosPulseSpeed = v / 10
+end})
+local secWings = Window:CreateSection("Wings", "Misc Visuals")
+secWings:AddToggle("Enable Wings", false, function(v)
+    cfg.wings.enabled = v
+end)
+secWings:AddDropdown("Style", {"Angel", "Demon"}, "Angel", function(v)
+    cfg.wings.style = v
+end)
+secWings:AddColorPicker("Wing Color", Color3.fromRGB(255, 255, 255), function(c)
+    cfg.wings.color = c
+end)
+secWings:AddColorPicker("Outline Color", Color3.fromRGB(200, 200, 255), function(c)
+    cfg.wings.outlineColor = c
+end)
+secWings:AddSlider("Opacity (%)", {Min = 0, Max = 100, Default = 85, Callback = function(v)
+    cfg.wings.opacity = v
+end})
+secWings:AddSlider("Outline Opacity (%)", {Min = 0, Max = 100, Default = 100, Callback = function(v)
+    cfg.wings.outlineOpacity = v
+end})
+secWings:AddSlider("Size", {Min = 10, Max = 100, Default = 40, Callback = function(v)
+    cfg.wings.size = v / 10
+end})
+secWings:AddSlider("Feathers", {Min = 3, Max = 12, Default = 6, Callback = function(v)
+    cfg.wings.feathers = v
+end})
+secWings:AddToggle("Rainbow", false, function(v)
+    cfg.wings.rainbow = v
+end)
+secWings:AddSlider("Rainbow Speed", {Min = 1, Max = 100, Default = 10, Callback = function(v)
+    cfg.wings.rainbowSpeed = v / 10
+end})
+local secFovChanger = Window:CreateSection("FovChanger", "Misc")
+secFovChanger:AddToggle("Enable FOV", false, function(v)
+    cfg.misc.fovEnabled = v
+    Arcane:Notify("AntiAim", "FOV Changer " .. (v and "[ON]" or "[OFF]"), 3)
+end)
+secFovChanger:AddSlider("FOV Value", {Min = 60, Max = 120, Default = 90, Callback = function(v)
+    cfg.misc.fovValue = tonumber(v) or 90
+end})
+local secFlip = Window:CreateSection("Flip 180", "Misc")
+local toggleFlip = secFlip:AddToggle("Flip", false, function(v)
+    cfg.misc.flipEnabled = v
+    Arcane:Notify("AntiAim", "Flip 180 " .. (v and "[ON]" or "[OFF]"), 3)
+end)
+secFlip:AddKeybind("Bind", "None", function()
+    cfg.misc.flipEnabled = not cfg.misc.flipEnabled
+    toggleFlip:SetValue(cfg.misc.flipEnabled)
+end, true)
+
+
+local secCFrameHop = Window:CreateSection("BunnyHop", "Misc")
+secCFrameHop:AddToggle("Enable", false, function(v)
+    cfg.misc.cframeBhopEnabled = v
+    Arcane:Notify("Movement", "BunnyHop " .. (v and "[ON]" or "[OFF]"), 3)
+end)
+secCFrameHop:AddToggle("Space Only", true, function(v)
+    cfg.misc.cframeBhopRequireSpace = v
+end)
+
+secCFrameHop:AddSlider("Max Speed", {Min = 20, Max = 220, Default = 160, Callback = function(v)
+    cfg.misc.cframeBhopMaxSpeed = tonumber(v) or 160
+end})
+secCFrameHop:AddSlider("Jump Strength", {Min = 10, Max = 100, Default = 20, Callback = function(v)
+    cfg.misc.cframeBhopJumpHeight = tonumber(v) or 50
+end})
+local secAutoJump = Window:CreateSection("AutoJump / Legit", "Movement")
+secAutoJump:AddToggle("Enabled", false, function(v)
+    cfg.misc.autoJumpEnabled = v
+end)
+secAutoJump:AddToggle("No Jump Cooldown", false, function(v)
+    cfg.misc.noJumpCooldown = v
+end)
+local secBm = Window:CreateSection("Trash Talk / BM", "Misc")
+secBm:AddDropdown("Message Type", {"Inertia", "Aggressive", "Toxic"}, "Inertia", function(v)
+    bmCfg.textType = v
+end)
+secBm:AddToggle("Auto Trash Talk", false, function(v)
+    bmCfg.enabled = v
+    if v then startBmAuto() else stopBmAuto() end
+    Arcane:Notify("BM Module", "Periodic BM " .. (v and "[ON]" or "[OFF]"), 3)
+end)
+secBm:AddSlider("Interval (s)", {Min = 5, Max = 120, Default = 15, Callback = function(v)
+    bmCfg.interval = v
+end})
+secBm:AddToggle("Kill BM", false, function(v)
+    bmCfg.killBmEnabled = v
+    Arcane:Notify("BM Module", "Kill-based BM " .. (v and "[ON]" or "[OFF]"), 3)
+end)
+secBm:AddSlider("Kill Detection Range", {Min = 10, Max = 500, Default = 50, Callback = function(v)
+    bmCfg.killBmDistance = v
+end})
+secBm:AddKeybind("Manual BM Bind", "None", function()
+    task.spawn(function() sendBmMessage() end)
+end, false)
+local localHat = { filled = {}, outline = {} }
+local localNimb = { filled = {}, outline = {} }
+local localServerPos = { filled = {}, outline = {} }
+local serverPosHistory = {}
+local localWings = { filled = {}, outline = {} }
+local function clearHatLines()
+    for _, tri in ipairs(localHat.filled) do pcall(function() tri:Remove() end) end
+    for _, tri in ipairs(localHat.outline) do pcall(function() tri:Remove() end) end
+    table.clear(localHat.filled)
+    table.clear(localHat.outline)
+end
+local function clearNimbLines()
+    for _, tri in ipairs(localNimb.filled) do pcall(function() tri:Remove() end) end
+    for _, tri in ipairs(localNimb.outline) do pcall(function() tri:Remove() end) end
+    table.clear(localNimb.filled)
+    table.clear(localNimb.outline)
+end
+local function clearServerPosLines()
+    for _, obj in ipairs(localServerPos.filled) do obj:Remove() end
+    for _, obj in ipairs(localServerPos.outline) do obj:Remove() end
+    table.clear(localServerPos.filled)
+    table.clear(localServerPos.outline)
+end
+local function clearWings()
+    for _, obj in ipairs(localWings.filled) do obj:Remove() end
+    for _, obj in ipairs(localWings.outline) do obj:Remove() end
+    table.clear(localWings.filled)
+    table.clear(localWings.outline)
+end
+local lastKnownRight = {yaw = 0}
+local currentRight = {yaw = 0, frozenOffset = 0, lastMoveState = false, moveStartTime = 0, stopTime = 0, stopDuration = 0, stopOffset = 0}
+task.spawn(function()
+    while true do
+        task.wait()
+        local success, err = pcall(function()
+            local cam = workspace.CurrentCamera
+            local player = Players.LocalPlayer
+            if not cam or not player then return end
+            local char = player.Character
+            if not char or not isAlive(player) then
+                for _, tri in ipairs(localHat.filled) do tri.Visible = false end
+                for _, tri in ipairs(localHat.outline) do tri.Visible = false end
+                for _, tri in ipairs(localNimb.filled) do tri.Visible = false end
+                for _, tri in ipairs(localNimb.outline) do tri.Visible = false end
+                for _, obj in ipairs(localServerPos.filled) do obj.Visible = false end
+                for _, obj in ipairs(localServerPos.outline) do obj.Visible = false end
+                clearWings()
+                return
+            end
+                
+            local head = char:FindFirstChild("Head")
+            if not head then return end
+            if not cfg.visuals.hatEnabled then
+                clearHatLines()
+            else
+                local filled = localHat.filled
+                local outline = localHat.outline
+                local segs = math.floor(cfg.visuals.hatSegments)
+                
+                for i = 1, segs do
+                    if not filled[i] then
+                        filled[i] = Drawing.new("Triangle")
+                        filled[i].Filled = true
+                        filled[i].Thickness = 1
+                    end
+                    if not outline[i] then
+                        outline[i] = Drawing.new("Triangle")
+                        outline[i].Filled = false
+                        outline[i].Thickness = 2
+                    end
+                    
+                    local fTriangle = filled[i]
+                    local oTriangle = outline[i]
+                    
+                    local a1 = ((i - 1) / segs) * math.pi * 2
+                    local a2 = (i / segs) * math.pi * 2
+                    
+                    local mColor = cfg.visuals.hatMainColor
+                    local oColor = cfg.visuals.hatOutlineColor
+                    
+                    if cfg.visuals.hatRainbow then
+                        local baseOffset = os.clock() * cfg.visuals.hatRainbowSpeed * 0.1
+                        local h1 = (a1 / (math.pi * 2) - baseOffset) % 1
+                        if h1 < 0 then h1 = h1 + 1 end
+                        mColor = Color3.fromHSV(h1, 1, 1)
+                        oColor = Color3.fromHSV(h1, 1, 1)
+                    end
+                    
+                    fTriangle.Color = mColor
+                    oTriangle.Color = oColor
+                    fTriangle.Transparency = cfg.visuals.hatMainOpacity / 100
+                    oTriangle.Transparency = cfg.visuals.hatOutlineOpacity / 100
+                    
+                    local radius = cfg.visuals.hatRadius
+                    local height = cfg.visuals.hatHeight
+                    local center = head.Position + Vector3.new(0, height * 0.2, 0)
+                    local topPos = center + Vector3.new(0, height, 0)
+                    local p1 = center + Vector3.new(math.cos(a1) * radius, 0, math.sin(a1) * radius)
+                    local p2 = center + Vector3.new(math.cos(a2) * radius, 0, math.sin(a2) * radius)
+                    
+                    local sTop, vTop = WorldToScreen(topPos)
+                    local s1, v1 = WorldToScreen(p1)
+                    local s2, v2 = WorldToScreen(p2)
+                    
+                    if vTop and v1 and v2 then
+                        fTriangle.PointA = sTop
+                        fTriangle.PointB = s1
+                        fTriangle.PointC = s2
+                        fTriangle.Visible = true
+                        
+                        oTriangle.PointA = sTop
+                        oTriangle.PointB = s1
+                        oTriangle.PointC = s2
+                        oTriangle.Visible = true
+                    else
+                        fTriangle.Visible = false
+                        oTriangle.Visible = false
+                    end
+                end
+                
+                for i = #filled, segs + 1, -1 do
+                    if filled[i] then
+                        pcall(function() filled[i]:Remove() end)
+                        filled[i] = nil
+                    end
+                end
+                for i = #outline, segs + 1, -1 do
+                    if outline[i] then
+                        pcall(function() outline[i]:Remove() end)
+                        outline[i] = nil
+                    end
+                end
+            end
+            
+            if not cfg.visuals.NimbEnabled then
+                clearNimbLines()
+            else
+                local R = cfg.visuals.NimbRadius
+                local rTube = cfg.visuals.NimbTubeRadius or 0.15
+                local uSegs = math.floor(cfg.visuals.NimbSegments)
+                local vSegs = math.floor(cfg.visuals.NimbTubeSegments or 8)
+                
+                local topPos = head.Position + Vector3.new(0, cfg.visuals.NimbHeight, 0)
+                
+                local lx, ly, lz = 0.5, 1.0, 0.5
+                local lLen = math.sqrt(lx*lx + ly*ly + lz*lz)
+                lx, ly, lz = lx/lLen, ly/lLen, lz/lLen
+                
+                local function getTorusPtAndNorm(uA, vA)
+                    local uC, uS = math.cos(uA), math.sin(uA)
+                    local vC, vS = math.cos(vA), math.sin(vA)
+                    
+                    local x = (R + rTube * vC) * uC
+                    local y = rTube * vS
+                    local z = (R + rTube * vC) * uS
+                    
+                    local p = topPos + Vector3.new(x, y, z)
+                    local nx = vC * uC
+                    local ny = vS
+                    local nz = vC * uS
+                    
+                    return p, {nx, ny, nz}
+                end
+                
+                local tIdx = 1
+                local maxTris = uSegs * vSegs * 2
+                
+                for i = 0, uSegs - 1 do
+                    local u1 = (i / uSegs) * math.pi * 2
+                    local u2 = ((i + 1) / uSegs) * math.pi * 2
+                    
+                    local hColor = cfg.visuals.NimbMainColor
+                    if cfg.visuals.NimbRainbow then
+                        local offset = os.clock() * cfg.visuals.NimbRainbowSpeed * 0.1
+                        local h = (u1 / (math.pi * 2) - offset) % 1
+                        if h < 0 then h = h + 1 end
+                        hColor = Color3.fromHSV(h, 1, 1)
+                    end
+                    
+                    for j = 0, vSegs - 1 do
+                        local v1 = (j / vSegs) * math.pi * 2
+                        local v2 = ((j + 1) / vSegs) * math.pi * 2
+                        
+                        local p1, n1 = getTorusPtAndNorm(u1, v1)
+                        local p2, n2 = getTorusPtAndNorm(u2, v1)
+                        local p3, n3 = getTorusPtAndNorm(u1, v2)
+                        local p4, n4 = getTorusPtAndNorm(u2, v2)
+                        
+                        local trisData = { {p1, p2, p3, n1}, {p3, p2, p4, n4} }
+                        
+                        for _, tD in ipairs(trisData) do
+                            local pa, pb, pc, pNorm = tD[1], tD[2], tD[3], tD[4]
+                            
+                            local sA, visA = WorldToScreen(pa)
+                            local sB, visB = WorldToScreen(pb)
+                            local sC, visC = WorldToScreen(pc)
+                            
+                            if visA and visB and visC then
+                                local cross2D = (sB.X - sA.X) * (sC.Y - sA.Y) - (sB.Y - sA.Y) * (sC.X - sA.X)
+                                
+                                if cross2D < 0 then
+                                    local triFill = localNimb.filled[tIdx]
+                                    local triOut = localNimb.outline[tIdx]
+                                    if not triFill then
+                                        triFill = Drawing.new("Triangle")
+                                        triFill.Filled = true
+                                        triFill.Thickness = 1
+                                        localNimb.filled[tIdx] = triFill
+                                        
+                                        triOut = Drawing.new("Triangle")
+                                        triOut.Filled = false
+                                        triOut.Thickness = 1
+                                        localNimb.outline[tIdx] = triOut
+                                    end
+                                    
+                                    local dotProduct = pNorm[1]*lx + pNorm[2]*ly + pNorm[3]*lz
+                                    local intensity = 0.75 + 0.25 * math.max(0, dotProduct)
+                                    local rC = math.clamp(hColor.R * intensity, 0, 1)
+                                    local gC = math.clamp(hColor.G * intensity, 0, 1)
+                                    local bC = math.clamp(hColor.B * intensity, 0, 1)
+                                    
+                                    triFill.Color = Color3.new(rC, gC, bC)
+                                    triFill.Transparency = cfg.visuals.NimbMainOpacity / 100
+                                    triFill.PointA = sA
+                                    triFill.PointB = sB
+                                    triFill.PointC = sC
+                                    triFill.Visible = true
+                                    
+                                    local oCol = cfg.visuals.NimbRainbow and hColor or cfg.visuals.NimbOutlineColor
+                                    triOut.Color = oCol
+                                    triOut.Transparency = cfg.visuals.NimbOutlineOpacity / 100
+                                    triOut.PointA = sA
+                                    triOut.PointB = sB
+                                    triOut.PointC = sC
+                                    triOut.Visible = true
+                                    
+                                    tIdx = tIdx + 1
+                                end
+                            end
+                        end
+                    end
+                end
+                
+                for k = #localNimb.filled, tIdx, -1 do
+                    if k > maxTris * 1.5 then
+                        pcall(function() localNimb.filled[k]:Remove() end)
+                        pcall(function() localNimb.outline[k]:Remove() end)
+                        localNimb.filled[k] = nil
+                        localNimb.outline[k] = nil
+                    elseif localNimb.filled[k] then
+                        localNimb.filled[k].Visible = false
+                        localNimb.outline[k].Visible = false
+                    end
+                end
+            end
+            
+            if not cfg.visuals.serverPosEnabled then
+                clearServerPosLines()
+            else
+                local hrp = char:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    local stats = game:GetService("Stats")
+                    local rawPing = cfg.visuals.serverPosLatency
+                    
+                    pcall(function()
+                        local perf = stats:FindFirstChild("PerformanceStats")
+                        local net = stats:FindFirstChild("Network")
+                        local pPing = perf and perf:FindFirstChild("Ping")
+                        local dPing = net and net:FindFirstChild("ServerStatsItem") and net.ServerStatsItem:FindFirstChild("Data Ping")
+                        local pVal = (pPing and memory_read("double", pPing.Address + 0xC8)) or (pPing and pPing:GetValue()) or 0
+                        local dVal = (dPing and memory_read("double", dPing.Address + 0xC8)) or (dPing and dPing:GetValue()) or 0
+                        if pVal == 0 then pVal = player:GetNetworkPing() * 1000 end
+                        rawPing = math.max(pVal, dVal) / 1000
+                    end)
+                    
+                    local latencyTime = (rawPing * 3.0) + 0.28
+                    local now = os.clock()
+                    table.insert(serverPosHistory, {t = now, pos = hrp.Position})
+                    local targetTime = now - latencyTime
+                    
+                    while #serverPosHistory > 1 and serverPosHistory[1].t < targetTime - 1.5 do
+                        table.remove(serverPosHistory, 1)
+                    end
+                    
+                    local closestMatch = hrp.Position
+                    if #serverPosHistory >= 2 then
+                        local pBefore, pAfter = nil, nil
+                        for i = #serverPosHistory, 1, -1 do
+                            local entry = serverPosHistory[i]
+                            if entry.t <= targetTime then
+                                pBefore = entry
+                                pAfter = serverPosHistory[i+1]
+                                break
+                            end
+                        end
+                        if pBefore and pAfter then
+                            local alpha = math.clamp((targetTime - pBefore.t) / (pAfter.t - pBefore.t), 0, 1)
+                            closestMatch = lerpVector(pBefore.pos, pAfter.pos, alpha)
+                        elseif pBefore then
+                            closestMatch = pBefore.pos
+                        end
+                    end
+                    
+                    local sPos = closestMatch - Vector3.new(0, 2.8, 0)
+                    local segs = math.floor(cfg.visuals.serverPosSides)
+                    local rawRadius = cfg.visuals.serverPosRadius / 10
+                    local pulse = (cfg.visuals.serverPosPulseSpeed > 0) and (math.sin(os.clock() * cfg.visuals.serverPosPulseSpeed) * (rawRadius * 0.15)) or 0
+                    local radius = rawRadius + pulse
+                    local spinOffset = (cfg.visuals.serverPosSpinSpeed > 0) and (os.clock() * cfg.visuals.serverPosSpinSpeed) or 0
+                    local center2D, centerVis = WorldToScreen(sPos)
+                    
+                    for i = 1, segs do
+                        if not localServerPos.filled[i] then
+                            localServerPos.filled[i] = Drawing.new("Triangle")
+                            localServerPos.filled[i].Filled = true
+                            localServerPos.filled[i].Thickness = 1
+                            localServerPos.outline[i] = Drawing.new("Line")
+                            localServerPos.outline[i].Thickness = 2
+                        end
+                        
+                        local a1 = ((i - 1) / segs) * math.pi * 2 + spinOffset
+                        local a2 = (i / segs) * math.pi * 2 + spinOffset
+                        local p1 = sPos + Vector3.new(math.cos(a1) * radius, 0, math.sin(a1) * radius)
+                        local p2 = sPos + Vector3.new(math.cos(a2) * radius, 0, math.sin(a2) * radius)
+                        local s1, v1 = WorldToScreen(p1)
+                        local s2, v2 = WorldToScreen(p2)
+                        local tri = localServerPos.filled[i]
+                        local line = localServerPos.outline[i]
+                        
+                        if centerVis and v1 and v2 then
+                            tri.Color = cfg.visuals.serverPosColor
+                            tri.Transparency = (cfg.visuals.serverPosOpacity / 100) * 0.35
+                            tri.PointA = center2D ; tri.PointB = s1 ; tri.PointC = s2 ; tri.Visible = true
+                            line.Color = cfg.visuals.serverPosColor
+                            line.Transparency = cfg.visuals.serverPosOpacity / 100
+                            line.From = s1 ; line.To = s2 ; line.Visible = true
+                        else
+                            tri.Visible = false ; line.Visible = false
+                        end
+                    end
+                    for k = segs + 1, #localServerPos.filled do
+                        if localServerPos.filled[k] then localServerPos.filled[k].Visible = false end
+                        if localServerPos.outline[k] then localServerPos.outline[k].Visible = false end
+                    end
+                end
+            end
+            
+            if not cfg.wings.enabled then
+                clearWings()
+            else
+                local char = player.Character
+                local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                local torso = char and (char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso"))
+                if hrp and torso then
+                    local t = os.clock()
+                    local flapAngle = math.sin(t * 2.0) * 0.3
+                    local sz = cfg.wings.size
+                    local style = cfg.wings.style
+                    local numFeathers = math.floor(cfg.wings.feathers)
+                    local basePos = hrp.Position + Vector3.new(0, 0, 0)
+                    local spd = 0
+                    pcall(function()
+                        local rightArm = char:FindFirstChild("Right Arm") or char:FindFirstChild("RightUpperArm")
+                        local leftArm = char:FindFirstChild("Left Arm") or char:FindFirstChild("LeftUpperArm")
+                        local vL = hrp.AssemblyLinearVelocity
+                        spd = math.sqrt(vL.X^2 + vL.Z^2)
+                        
+                        if rightArm and leftArm then
+                            local dx = rightArm.Position.X - leftArm.Position.X
+                            local dz = rightArm.Position.Z - leftArm.Position.Z
+                            local dLen = math.sqrt(dx^2 + dz^2)
+                            if dLen > 0.5 then
+                                rxL = dx / dLen
+                                rzL = dz / dLen
+                            end
+                        else
+                            if spd > 1.0 then
+                                rxL = -vL.Z / spd
+                                rzL =  vL.X / spd
+                            end
+                        end
+                    end)
+                    if rxL and rzL then
+                        local tYaw = math.atan2(-rzL, rxL)
+                        if spd > 1 then
+                            if not currentRight.lastMoveState then
+                                currentRight.lastMoveState = true
+                                currentRight.moveStartTime = t
+                            end
+                            local diff = (tYaw - currentRight.yaw + math.pi) % (math.pi * 2) - math.pi
+                            currentRight.yaw = currentRight.yaw + diff * 0.05
+                            currentRight.frozenOffset = (currentRight.yaw - tYaw + math.pi) % (math.pi * 2) - math.pi
+                        else
+                            if currentRight.lastMoveState then
+                                currentRight.lastMoveState = false
+                                currentRight.stopTime = t
+                                currentRight.stopDuration = math.min(t - currentRight.moveStartTime, 5.0)
+                                currentRight.stopOffset = currentRight.frozenOffset
+                            end
+                            local elapsed = t - currentRight.stopTime
+                            currentRight.frozenOffset = (currentRight.stopDuration > 0 and elapsed < currentRight.stopDuration) and (currentRight.stopOffset * (1 - elapsed/currentRight.stopDuration)) or 0
+                            currentRight.yaw = tYaw + currentRight.frozenOffset
+                        end
+                    end
+                    
+                    local fYaw = currentRight.yaw or 0
+                    local rX, rZ = math.cos(fYaw), -math.sin(fYaw)
+                    local wColor = cfg.wings.rainbow and Color3.fromHSV((t * cfg.wings.rainbowSpeed * 0.1) % 1, 0.6, 1) or cfg.wings.color
+                    local wOut = cfg.wings.rainbow and Color3.fromHSV((t * cfg.wings.rainbowSpeed * 0.1 + 0.1) % 1, 0.8, 1) or cfg.wings.outlineColor
+                    
+                    local wTri = 1
+                    local function drawWingTri(pA, pB, pC, fA, oA)
+                        local sA, vA = WorldToScreen(pA) ; local sB, vB = WorldToScreen(pB) ; local sC, vC = WorldToScreen(pC)
+                        if not (vA and vB and vC) then return end
+                        if not localWings.filled[wTri] then
+                            localWings.filled[wTri] = Drawing.new("Triangle") ; localWings.filled[wTri].Filled = true ; localWings.filled[wTri].Thickness = 1
+                            localWings.outline[wTri] = Drawing.new("Triangle") ; localWings.outline[wTri].Filled = false ; localWings.outline[wTri].Thickness = 2
+                        end
+                        local tf, to = localWings.filled[wTri], localWings.outline[wTri]
+                        tf.Color = wColor ; tf.Transparency = fA ; tf.PointA = sA ; tf.PointB = sB ; tf.PointC = sC ; tf.Visible = true
+                        to.Color = wOut ; to.Transparency = oA ; to.PointA = sA ; to.PointB = sB ; to.PointC = sC ; to.Visible = true
+                        wTri = wTri + 1
+                    end
+                    local function makeWing(side)
+                        local sgn = side
+                        local rx, rz = rX * sgn, rZ * sgn
+                        local bX, bZ = -rZ, rX
+                        local root = basePos + Vector3.new(bX * 0.4 + rx * 0.3, 0, bZ * 0.4 + rz * 0.3)
+                        if cfg.wings.style == "Angel" then
+                            local spread, flap = math.pi * 0.5, flapAngle * sgn
+                            for f = 0, numFeathers - 1 do
+                                local t0, t1 = f/numFeathers, (f+1)/numFeathers
+                                local aB, aT = (math.pi*-0.1) + t0*spread, (math.pi*-0.1) + t1*spread
+                                local fL, lF = sz * (1-t0*0.35), flap * (t0*1.5)
+                                local aM = (aB+aT)*0.5
+                                local tip = root + Vector3.new(rx*math.cos(aM)*fL, (math.sin(aM)+lF)*fL, rz*math.cos(aM)*fL)
+                                local e1 = root + Vector3.new(rx*math.cos(aB)*fL*0.6, math.sin(aB+lF*0.5)*fL*0.6, rz*math.cos(aB)*fL*0.6)
+                                local e2 = root + Vector3.new(rx*math.cos(aT)*fL*0.6, math.sin(aT+lF*0.5)*fL*0.6, rz*math.cos(aT)*fL*0.6)
+                                local alpha, oAlpha = cfg.wings.opacity/100 * (0.6+t0*0.4), cfg.wings.outlineOpacity/100
+                                drawWingTri(root, e1, tip, alpha, oAlpha) ; drawWingTri(root, tip, e2, alpha, oAlpha)
+                            end
+                        elseif cfg.wings.style == "Demon" then
+                            local flap = flapAngle * sgn
+                            local sAngles = {}
+                            for i = 1, numFeathers do sAngles[i] = math.pi*0.05 + (i/numFeathers)*math.pi*0.4 + math.sin(i*7.3)*0.15 end
+                            for i, ang in ipairs(sAngles) do
+                                local t0 = i/numFeathers
+                                local sL, sW = sz*(0.7+math.sin(i*2.1)*0.45), sz*0.07
+                                local tip = root + Vector3.new(rx*math.cos(ang)*sL, math.sin(ang)*sL+flap*t0*1.2, rz*math.cos(ang)*sL)
+                                local bXn, bZn = rz*sW, -rx*sW
+                                local eA, eB = root+Vector3.new(bXn, 0.15, bZn), root+Vector3.new(-bXn, -0.15, -bZn)
+                                local alpha, oAlpha = cfg.wings.opacity/100, cfg.wings.outlineOpacity/100
+                                drawWingTri(eA, tip, eB, alpha, oAlpha)
+                                if i > 1 then
+                                    local pa, pl = sAngles[i-1], sz*(0.7+math.sin((i-1)*2.1)*0.45)
+                                    local pTip = root+Vector3.new(rx*math.cos(pa)*pl, math.sin(pa)*pl+flap*((i-1)/numFeathers)*1.2, rz*math.cos(pa)*pl)
+                                    drawWingTri(root, pTip, tip, alpha*0.45, oAlpha*0.6)
+                                end
+                            end
+                        end
+                    end
+                    makeWing(1) ; makeWing(-1)
+                    for k = wTri, #localWings.filled do
+                        if localWings.filled[k] then localWings.filled[k].Visible = false ; localWings.outline[k].Visible = false end
+                    end
+                end
+            end
+            
+        end)
+        if not success then
+        end
+    end
+end)
+Window:Finalize()
