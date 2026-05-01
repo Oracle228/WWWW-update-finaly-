@@ -1,0 +1,246 @@
+loadstring(game:HttpGet("https://raw.githubusercontent.com/Oracle228/Inertia/refs/heads/main/Arcane(Lib).lua"))()
+repeat task.wait() until Neverlose
+local Arcane = Neverlose
+local function getService(name)
+    local s = nil
+    pcall(function() s = game:GetService(name) end)
+    if not s then pcall(function() s = game[name] end) end
+    return s
+end
+local RunService = getService("RunService")
+local Players = getService("Players")
+local Workspace = workspace or getService("Workspace")
+local cam = Workspace and Workspace.CurrentCamera or workspace.CurrentCamera
+local cfg = {
+    world = {
+        woodChest = { enabled = false, name = false, dist = false, color = Color3.fromRGB(255, 200, 100) },
+        woodBarrel = { enabled = false, name = false, dist = false, color = Color3.fromRGB(200, 150, 100) },
+        merlinBarrel = { enabled = false, name = false, dist = false, color = Color3.fromRGB(150, 100, 255) },
+        coinPouch = { enabled = false, name = false, dist = false, color = Color3.fromRGB(255, 255, 0) },
+        bookcase = { enabled = false, name = false, dist = false, color = Color3.fromRGB(150, 100, 50) },
+        drawers = { enabled = false, name = false, dist = false, color = Color3.fromRGB(200, 180, 150) },
+        wardrobe = { enabled = false, name = false, dist = false, color = Color3.fromRGB(180, 150, 100) }
+    },
+    settings = {
+        maxDistance = 1000, 
+        textSize = 16,
+        textOutline = true,
+        dynamicSize = false,
+        dynamicScale = 10
+    }
+}
+local espList = {}
+local trackedAddrs = {}
+local typeToCfg = {}
+local itemDefs = {
+    {ConfigKey = "woodChest", Name = "Wood Chest", ModelName = "Wood Chest", PartPath = "Bottom"},
+    {ConfigKey = "woodBarrel", Name = "Wood Barrel", ModelName = "Wood Barrel", PartPath = "Barrel"},
+    {ConfigKey = "merlinBarrel", Name = "Merlin's Barrel", ModelName = "Merlin's Barrel", PartPath = "Barrel"},
+    {ConfigKey = "coinPouch", Name = "Coin Pouch", ModelName = "Coin Pouch", PartPath = "Meshes/lootbag"},
+    {ConfigKey = "bookcase", Name = "Bookcase", ModelName = "Bookcase", PartPath = "BookShelf"},
+    {ConfigKey = "drawers", Name = "Drawers", ModelName = "Drawers", PartPath = "NightStand"},
+    {ConfigKey = "wardrobe", Name = "Wardrobe", ModelName = "Wardrobe", PartPath = "Wardrobe"}
+}
+
+for _, def in ipairs(itemDefs) do
+    typeToCfg[def.Name] = cfg.world[def.ConfigKey]
+end
+
+local Window = Arcane:CreateWindow("Overworld", Vector2.new(650, 580), "Midnight")
+Window:CreateTabSection("Main")
+
+
+local tabWorld = Window:CreateTab("Containers ESP")
+
+for _, def in ipairs(itemDefs) do
+    local sec = Window:CreateSection(def.Name, "Containers ESP")
+    local c = cfg.world[def.ConfigKey]
+    
+    sec:AddToggle("Enable " .. def.Name, c.enabled, function(v) c.enabled = v end)
+    sec:AddToggle("Show Name", c.name, function(v) c.name = v end)
+    sec:AddToggle("Show Distance", c.dist, function(v) c.dist = v end)
+    sec:AddColorPicker("Color", c.color, function(color) c.color = color end)
+end
+
+
+local tabSettings = Window:CreateTab("Visual Settings")
+local secSettings = Window:CreateSection("Global Settings", "Visual Settings")
+
+secSettings:AddSlider("Max Distance", {Min = 100, Max = 20000, Default = cfg.settings.maxDistance, Callback = function(v)
+    cfg.settings.maxDistance = v
+end})
+secSettings:AddSlider("Text Size (%)", {Min = 0, Max = 100, Default = cfg.settings.textSize, Callback = function(v)
+    cfg.settings.textSize = v
+end})
+secSettings:AddToggle("Text Outline", cfg.settings.textOutline, function(v)
+    cfg.settings.textOutline = v
+end)
+secSettings:AddToggle("Dynamic Size", cfg.settings.dynamicSize, function(v)
+    cfg.settings.dynamicSize = v
+end)
+secSettings:AddSlider("Dynamic Scale", {Min = 1, Max = 100, Default = cfg.settings.dynamicScale, Callback = function(v)
+    cfg.settings.dynamicScale = v
+end})
+local function createVisual(rootPart, model, typ, customName)
+    local addr = model.Address
+    trackedAddrs[addr] = true
+    
+
+    local function getChar()
+        local LocalPlayer = Players.LocalPlayer
+        local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+        local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
+        return HumanoidRootPart, LocalPlayer, Character
+    end
+
+
+
+    local esp = {
+        Label = Drawing.new("Text"),
+        Object = rootPart,
+        Model = model,
+        Name = customName or model.Name,
+        Type = typ
+    }
+    esp.Label.Size = cfg.settings.textSize
+    esp.Label.Center = true 
+    esp.Label.Outline = cfg.settings.textOutline 
+    esp.Label.ZIndex = 120 
+    esp.Label.Font = Drawing.Fonts.Fortnite
+    esp.Label.Visible = false
+    return esp
+end
+
+
+
+local function isTrackingStr(model)
+    local addr = nil
+    pcall(function() addr = model.Address end)
+    return addr and trackedAddrs[addr] == true
+end
+local function getPartFromPath(model, pathStr)
+    if not string.find(pathStr, "/") then
+        return model:FindFirstChild(pathStr)
+    end
+    local parts = string.split(pathStr, "/")
+    local current = model
+    for _, name in ipairs(parts) do
+        current = current:FindFirstChild(name)
+        if not current then return nil end
+    end
+    return current
+end
+
+
+
+
+local function updateScanners()
+    local containersFolder = Workspace:FindFirstChild("Containers")
+    if not containersFolder then return end
+    for _, cityFolder in ipairs(containersFolder:GetChildren()) do
+        for _, model in ipairs(cityFolder:GetChildren()) do
+            for _, def in ipairs(itemDefs) do
+                if model.Name == def.ModelName then
+                    if cfg.world[def.ConfigKey].enabled then
+                        local targetPart = getPartFromPath(model, def.PartPath)
+                        if targetPart and not isTrackingStr(model) then
+                            table.insert(espList, createVisual(targetPart, model, def.Name, def.Name))
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+
+
+
+
+local function updateVisuals()
+    local camObj = Workspace.CurrentCamera
+    if not camObj then return end
+    local camPos = camObj.Position
+    local maxDist = cfg.settings.maxDistance
+
+    for i = #espList, 1, -1 do
+        local v = espList[i]
+        local cCfg = typeToCfg[v.Type]
+        local cObj = v.Object
+        local model = v.Model
+
+        if not cObj or not model or not cObj.Parent or not model.Parent or not cCfg.enabled then
+            pcall(function()
+                local addr = (model and model.Address)
+                if addr then trackedAddrs[addr] = nil end
+                v.Label:Remove()
+            end)
+            table.remove(espList, i)
+        else
+            local pos = cObj.Position
+            local sPos, onScreen = worldToScreen(pos)
+            local dist = (pos - camPos).Magnitude
+            
+            if onScreen and dist <= maxDist then
+                local size = 3500 / dist
+                local x, y = sPos.X, sPos.Y
+                local hs = size / 2
+                local clr = cCfg.color
+
+                if cCfg.name or cCfg.dist then
+                    local txt = ""
+                    if cCfg.name then txt = v.Name end
+                    if cCfg.dist then txt = txt .. (txt ~= "" and " " or "") .. "[" .. math.floor(dist) .. "m]" end
+                    v.Label.Text = txt
+                    v.Label.Position = Vector2.new(x, y + hs + 5)
+                    v.Label.Color = clr
+                    
+                    local finalSize = cfg.settings.textSize
+                    if cfg.settings.dynamicSize then
+                        local add = (1 - math.min(dist / maxDist, 1)) * cfg.settings.dynamicScale
+                        finalSize = math.clamp(finalSize + add, 1, 100)
+                    end
+                    v.Label.Size = finalSize
+                    v.Label.Outline = cfg.settings.textOutline
+                    v.Label.Visible = true
+                else
+                    v.Label.Visible = false
+                end
+            else
+                if v.Label.Visible then
+                    v.Label.Visible = false
+                end
+            end
+        end
+    end
+end
+
+
+
+
+task.spawn(function()
+    while true do
+        task.wait(0) 
+        pcall(updateScanners)
+    end
+end)
+
+
+task.spawn(function()
+    while true do
+        pcall(updateVisuals)
+        task.wait(0)
+    end
+end)
+
+
+task.spawn(function()
+    while true do
+        if type(iskeypressed) == "function" and iskeypressed(45) then
+            Window:SetVisible(not Neverlose.IsOpen)
+            task.wait(0.3)
+        end
+        task.wait()
+    end
+end)
+Window:Finalize()
