@@ -392,10 +392,10 @@ local function updateIndicators()
         end
     end)
 end
-local OFF_PRIMITIVE = 0x148
-local OFF_CFRAME = 0xC0
-local OFF_HUMANOID_FLOOR_MATERIAL = 0x190
-local OFF_HUMANOID_JUMP_POWER = 0x1B0
+local OFF_PRIMITIVE = 0x128              -- BasePart::Primitive (new)
+local OFF_CFRAME = 0xC8                 -- Primitive::Rotation (new)
+local OFF_HUMANOID_FLOOR_MATERIAL = 0x184 -- Humanoid::FloorMaterial (new)
+local OFF_HUMANOID_JUMP_POWER = 0x1A4   -- Humanoid::JumpPower (new)
 local FLOOR_MATERIAL_AIR = 1792
 local SOURCE_STOP_SPEED = 10
 local SOURCE_FRICTION = 5
@@ -438,8 +438,8 @@ local function getCamLookYaw()
     if not cam then return 0 end
     local camAddr = cam.Address
     if not camAddr or camAddr == 0 then return 0 end
-    local bx = memory_read("float", camAddr + 0xF8 + 0x18)
-    local bz = memory_read("float", camAddr + 0xF8 + 0x20)
+    local bx = memory_read("float", camAddr + 0xD8 + 0x18)
+    local bz = memory_read("float", camAddr + 0xD8 + 0x20)
     return math.atan2(-bx, -bz)
 end
 local function isAlive(p)
@@ -568,8 +568,8 @@ local function getBunnyHopWishDir(humanoid)
     local camAddr = (cam and cam.Address) or 0
     if camAddr == 0 then return 0, 0, 0 end
 
-    local bx = memory_read("float", camAddr + 0xF8 + 0x18)
-    local bz = memory_read("float", camAddr + 0xF8 + 0x20)
+    local bx = memory_read("float", camAddr + 0xD8 + 0x18)
+    local bz = memory_read("float", camAddr + 0xD8 + 0x20)
     
 
     local lx, lz = bx, -bz
