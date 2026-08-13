@@ -392,10 +392,10 @@ local function updateIndicators()
         end
     end)
 end
-local OFF_PRIMITIVE = 0x128              -- BasePart::Primitive (new)
-local OFF_CFRAME = 0xC8                 -- Primitive::Rotation (new)
-local OFF_HUMANOID_FLOOR_MATERIAL = 0x184 -- Humanoid::FloorMaterial (new)
-local OFF_HUMANOID_JUMP_POWER = 0x1A4   -- Humanoid::JumpPower (new)
+local OFF_PRIMITIVE = 0x128
+local OFF_CFRAME = 0xC8
+local OFF_HUMANOID_FLOOR_MATERIAL = 0x184
+local OFF_HUMANOID_JUMP_POWER = 0x1A4
 local FLOOR_MATERIAL_AIR = 1792
 local SOURCE_STOP_SPEED = 10
 local SOURCE_FRICTION = 5
