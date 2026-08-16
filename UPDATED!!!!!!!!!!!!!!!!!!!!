@@ -514,12 +514,14 @@ local function isBunnyHopGrounded(humanoid)
     if not hrp then return false end
 
     local vy = hrp.Velocity.y or hrp.Velocity.Y or 0
-    if vy > 1.5 then return false end
+    if math.abs(vy) > 1.5 then return false end
 
     local ok, material = pcall(function() return humanoid.FloorMaterial end)
     if ok and material ~= nil then
         local materialName = tostring(material)
-        if materialName ~= "Air" and materialName ~= "Enum.Material.Air" and materialName ~= "" then
+        if materialName == "Enum.Material.Air" or materialName == "Air" then
+            return false
+        elseif materialName ~= "" then
             return true
         end
     end
@@ -532,9 +534,10 @@ local function isBunnyHopGrounded(humanoid)
         end
     end)
     if type(floorMat) == "number" then
-        if floorMat ~= FLOOR_MATERIAL_AIR then
-            return true
+        if floorMat == 0 or floorMat == FLOOR_MATERIAL_AIR then
+            return false
         end
+        return true
     end
 
     return false
@@ -680,71 +683,56 @@ local function updateCFrameBhop(humanoid, hrp, dt)
 
     local vel = hrp.AssemblyLinearVelocity or hrp.Velocity
     local vx, vz = getVectorXZ(vel)
-    local currentVy = (vel and (vel.Y or vel.y)) or 0
+    local curVy = (vel and (vel.Y or vel.y)) or 0
     local dirX, dirZ, dirLen = getBunnyHopWishDir(humanoid)
 
     local deltaTime = math.max(dt or 0.01, 0.008)
     local grounded = isBunnyHopGrounded(humanoid)
     local maxSpeed = math.max(40, tonumber(cfg.misc.cframeBhopMaxSpeed) or 160)
-    local shouldWrite = false
     local planarSpeed = getPlanarSpeedFromValues(vx, vz)
 
-    local targetVy = nil 
     local now = os.clock()
 
-    if grounded and not bunnyHopJumpLocked and (now - lastJumpTick > 0.15) then
-        targetVy = tonumber(cfg.misc.cframeBhopJumpHeight) or 50
+    -- Jump impulse only when grounded AND moving OR holding space, with strict cooldown
+    if grounded and math.abs(curVy) <= 0.5 and not bunnyHopJumpLocked and (now - lastJumpTick > 0.35) then
+        local targetVy = tonumber(cfg.misc.cframeBhopJumpHeight) or 50
         bunnyHopJumpLocked = true
         lastJumpTick = now
-        shouldWrite = true
+        pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end)
+        writePlanarVelocity(hrp, vx, vz, targetVy)
+        return
     elseif not grounded then
         bunnyHopJumpLocked = false
     end
 
-    if dirLen > 0.001 then
+    -- Horizontal air-strafe logic only when moving in air
+    if not grounded and dirLen > 0.001 then
         local moveDirX, moveDirZ = dirX, dirZ
         local currentDirX, currentDirZ, currentDirLen = normalizeXZ(vx, vz)
         if currentDirLen > 0.001 then
             local turnFactor = math.min(1, SOURCE_TURN_RATE * deltaTime)
-            if grounded then
-                turnFactor = math.min(1, turnFactor * 1.75)
-            end
             moveDirX, moveDirZ = blendPlanarDir(currentDirX, currentDirZ, dirX, dirZ, turnFactor)
         end
 
-        if grounded and not holdingSpace then
-            vx, vz = applyPlanarFriction(vx, vz, deltaTime)
-        end
+        local desiredWishSpeed = math.max(planarSpeed, 20)
+        vx, vz = acceleratePlanar(vx, vz, moveDirX, moveDirZ, desiredWishSpeed, SOURCE_AIR_ACCEL, deltaTime)
 
-        local desiredWishSpeed = math.max(planarSpeed, grounded and 26 or 20)
-        local accel = grounded and SOURCE_GROUND_ACCEL or SOURCE_AIR_ACCEL
-        vx, vz = acceleratePlanar(vx, vz, moveDirX, moveDirZ, desiredWishSpeed, accel, deltaTime)
-
-        local gain = (grounded and SOURCE_GROUND_GAIN or SOURCE_AIR_GAIN) * deltaTime
-        local newSpeed = math.min(maxSpeed, math.max(getPlanarSpeedFromValues(vx, vz), planarSpeed, grounded and 24 or 18) + gain)
+        local gain = SOURCE_AIR_GAIN * deltaTime
+        local newSpeed = math.min(maxSpeed, math.max(getPlanarSpeedFromValues(vx, vz), planarSpeed, 18) + gain)
         vx, vz = moveDirX * newSpeed, moveDirZ * newSpeed
-        shouldWrite = true
-    elseif grounded and not holdingSpace then
-        vx, vz = applyPlanarFriction(vx, vz, deltaTime)
-        shouldWrite = true
-    elseif shouldWrite then
-        local speed = getPlanarSpeedFromValues(vx, vz)
-        if speed > maxSpeed then
-            vx, vz = clampPlanarSpeed(vx, vz, maxSpeed)
-        end
-    end
+        vx, vz = clampPlanarSpeed(vx, vz, maxSpeed)
 
-    vx, vz = clampPlanarSpeed(vx, vz, maxSpeed)
-
-    if shouldWrite then
-        writePlanarVelocity(hrp, vx, vz, targetVy)
+        -- Write ONLY horizontal velocity while airborne (preserve physical Y Y-velocity)
+        writePlanarVelocity(hrp, vx, vz, nil)
     end
 end
 local function updateAutoJump(humanoid)
     if not cfg.misc.autoJumpEnabled then return end
+    -- If CFrame Bhop is active, let updateCFrameBhop handle jumping to avoid double jumps
+    if cfg.misc.cframeBhopEnabled then return end
     
     local grounded = isBunnyHopGrounded(humanoid)
-    if grounded and (os.clock() - lastJumpTick > 0.15) then
+    if grounded and (os.clock() - lastJumpTick > 0.35) then
         lastJumpTick = os.clock()
         pcall(function()
             if cfg.misc.noJumpCooldown then
@@ -946,6 +934,46 @@ task.spawn(function()
         end
     end
 end)
+local OFF_HUMANOID_AUTOROTATE = 0x1D5
+
+local function applyAntiAimForce(humanoid, hrpPrim, pitch, yaw)
+    if humanoid then
+        pcall(function() humanoid.AutoRotate = false end)
+        local humAddr = humanoid.Address
+        if humAddr and humAddr ~= 0 then
+            memory_write("byte", humAddr + OFF_HUMANOID_AUTOROTATE, 0)
+        end
+    end
+    setPitchYaw(hrpPrim, pitch, yaw)
+    -- Zero out AssemblyAngularVelocity in memory to stop Roblox physics engine from applying rotation torque
+    local baseVel = hrpPrim + 0x104 -- Primitive::AssemblyAngularVelocity
+    memory_write("float", baseVel + 0x00, 0)
+    memory_write("float", baseVel + 0x04, 0)
+    memory_write("float", baseVel + 0x08, 0)
+end
+
+local lastAntiAimHrpPrim = nil
+local lastAntiAimHumanoid = nil
+local lastAntiAimYaw = 0
+local lastAntiAimPitch = 0
+local isAntiAimActive = false
+
+RunService.Stepped:Connect(function()
+    if isAntiAimActive and lastAntiAimHrpPrim then
+        pcall(function()
+            applyAntiAimForce(lastAntiAimHumanoid, lastAntiAimHrpPrim, lastAntiAimPitch, lastAntiAimYaw)
+        end)
+    end
+end)
+
+RunService.RenderStepped:Connect(function()
+    if isAntiAimActive and lastAntiAimHrpPrim then
+        pcall(function()
+            applyAntiAimForce(lastAntiAimHumanoid, lastAntiAimHrpPrim, lastAntiAimPitch, lastAntiAimYaw)
+        end)
+    end
+end)
+
 task.spawn(function()
     local lastT = tick()
     while true do
@@ -973,6 +1001,19 @@ task.spawn(function()
                 end
             end
             
+            local function restoreAutoRotate()
+                if isAntiAimActive then
+                    isAntiAimActive = false
+                    if humanoid then
+                        pcall(function() humanoid.AutoRotate = true end)
+                        local humAddr = humanoid.Address
+                        if humAddr and humAddr ~= 0 then
+                            memory_write("byte", humAddr + OFF_HUMANOID_AUTOROTATE, 1)
+                        end
+                    end
+                end
+            end
+
             if cfg.spinner.enabled then
                 local hrpPrim = getPrimitive(hrp)
                 if hrpPrim then
@@ -984,7 +1025,12 @@ task.spawn(function()
                         sRad = math.rad(spinAngle)
                     end
                     local pitch = cfg.misc.flipEnabled and math.pi or 0
-                    setPitchYaw(hrpPrim, pitch, sRad)
+                    lastAntiAimHrpPrim = hrpPrim
+                    lastAntiAimHumanoid = humanoid
+                    lastAntiAimPitch = pitch
+                    lastAntiAimYaw = sRad
+                    isAntiAimActive = true
+                    applyAntiAimForce(humanoid, hrpPrim, pitch, sRad)
                 end
                 return
             end
@@ -992,8 +1038,19 @@ task.spawn(function()
                 if cfg.misc.flipEnabled then
                     local hrpPrim = getPrimitive(hrp)
                     if hrpPrim then
-                        setPitchYaw(hrpPrim, math.pi, getCamLookYaw())
+                        local pitch = math.pi
+                        local yaw = getCamLookYaw()
+                        lastAntiAimHrpPrim = hrpPrim
+                        lastAntiAimHumanoid = humanoid
+                        lastAntiAimPitch = pitch
+                        lastAntiAimYaw = yaw
+                        isAntiAimActive = true
+                        applyAntiAimForce(humanoid, hrpPrim, pitch, yaw)
+                    else
+                        restoreAutoRotate()
                     end
+                else
+                    restoreAutoRotate()
                 end
                 return
             end
@@ -1058,7 +1115,14 @@ task.spawn(function()
             local hrpPrim = getPrimitive(hrp)
             if hrpPrim then
                 local pitch = cfg.misc.flipEnabled and math.pi or 0
-                setPitchYaw(hrpPrim, pitch, finalYaw)
+                lastAntiAimHrpPrim = hrpPrim
+                lastAntiAimHumanoid = humanoid
+                lastAntiAimPitch = pitch
+                lastAntiAimYaw = finalYaw
+                isAntiAimActive = true
+                applyAntiAimForce(humanoid, hrpPrim, pitch, finalYaw)
+            else
+                restoreAutoRotate()
             end
         end)
         if not success then
