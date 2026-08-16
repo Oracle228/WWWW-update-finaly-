@@ -392,10 +392,10 @@ local function updateIndicators()
         end
     end)
 end
-local OFF_PRIMITIVE = 0x188              -- BasePart::Primitive (0x188)
-local OFF_CFRAME = 0xC8                 -- Primitive::Rotation (0xC8)
-local OFF_HUMANOID_FLOOR_MATERIAL = 0x890 -- Humanoid::FloorMaterial (0x890)
-local OFF_HUMANOID_JUMP_POWER = 0x1A4   -- Humanoid::JumpPower (0x1A4)
+local OFF_PRIMITIVE = 0x188
+local OFF_CFRAME = 0xC8
+local OFF_HUMANOID_FLOOR_MATERIAL = 0x890
+local OFF_HUMANOID_JUMP_POWER = 0x1A4
 local FLOOR_MATERIAL_AIR = 1792
 local SOURCE_STOP_SPEED = 10
 local SOURCE_FRICTION = 5
@@ -690,10 +690,7 @@ local function updateCFrameBhop(humanoid, hrp, dt)
     local grounded = isBunnyHopGrounded(humanoid)
     local maxSpeed = math.max(40, tonumber(cfg.misc.cframeBhopMaxSpeed) or 160)
     local planarSpeed = getPlanarSpeedFromValues(vx, vz)
-
     local now = os.clock()
-
-    -- Jump impulse only when grounded AND moving OR holding space, with strict cooldown
     if grounded and math.abs(curVy) <= 0.5 and not bunnyHopJumpLocked and (now - lastJumpTick > 0.35) then
         local targetVy = tonumber(cfg.misc.cframeBhopJumpHeight) or 50
         bunnyHopJumpLocked = true
@@ -704,8 +701,6 @@ local function updateCFrameBhop(humanoid, hrp, dt)
     elseif not grounded then
         bunnyHopJumpLocked = false
     end
-
-    -- Horizontal air-strafe logic only when moving in air
     if not grounded and dirLen > 0.001 then
         local moveDirX, moveDirZ = dirX, dirZ
         local currentDirX, currentDirZ, currentDirLen = normalizeXZ(vx, vz)
@@ -721,14 +716,11 @@ local function updateCFrameBhop(humanoid, hrp, dt)
         local newSpeed = math.min(maxSpeed, math.max(getPlanarSpeedFromValues(vx, vz), planarSpeed, 18) + gain)
         vx, vz = moveDirX * newSpeed, moveDirZ * newSpeed
         vx, vz = clampPlanarSpeed(vx, vz, maxSpeed)
-
-        -- Write ONLY horizontal velocity while airborne (preserve physical Y Y-velocity)
         writePlanarVelocity(hrp, vx, vz, nil)
     end
 end
 local function updateAutoJump(humanoid)
     if not cfg.misc.autoJumpEnabled then return end
-    -- If CFrame Bhop is active, let updateCFrameBhop handle jumping to avoid double jumps
     if cfg.misc.cframeBhopEnabled then return end
     
     local grounded = isBunnyHopGrounded(humanoid)
@@ -945,8 +937,7 @@ local function applyAntiAimForce(humanoid, hrpPrim, pitch, yaw)
         end
     end
     setPitchYaw(hrpPrim, pitch, yaw)
-    -- Zero out AssemblyAngularVelocity in memory to stop Roblox physics engine from applying rotation torque
-    local baseVel = hrpPrim + 0x104 -- Primitive::AssemblyAngularVelocity
+    local baseVel = hrpPrim + 0x104
     memory_write("float", baseVel + 0x00, 0)
     memory_write("float", baseVel + 0x04, 0)
     memory_write("float", baseVel + 0x08, 0)
